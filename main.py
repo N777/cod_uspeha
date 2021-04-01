@@ -105,13 +105,13 @@ def init_Wall():
 def init_forest(board, h, w, start):
     for i in range(1, h + 1):
         for j in range(1, w + 1):
-            if board[i][j] == 'f':
+            if board[i][j][1] == 'f':
                 all_sprites.add(Forest(start, j - 1, i - 1, forest_img))
 
 def init_mine(board, h, w, start):
     for i in range(1, h + 1):
         for j in range(1, w + 1):
-            if board[i][j] == 'm':
+            if board[i][j][1] == 'm':
                 all_sprites.add(Mine(start, j - 1, i - 1, mine_img))
 
 def init_score():
