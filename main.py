@@ -1,147 +1,211 @@
 import sys
 import random
+import pygame
+from pygame import *
+import os
 
-def write_board_in_file():
-    for el in board:
-        for i in el:
-            print('0' * int(len(str(i)) < 2) + str(i), end = ' ')
-        print()
+class Grass(pygame.sprite.Sprite):
+    def __init__(self, x, y):
+        pygame.sprite.Sprite.__init__(self)
+        self.image = pygame.transform.scale(grass_img, (width, height))
+        self.rect = self.image.get_rect()
+        self.x = x
+        self.y = y
+        self.rect.center = (self.x, self.y)
 
-def check_place_for_smth(i, j):
-    global board, mark, board_size
-    step = []
-    step.append([0, 0])
-    step.append([0, 1])
-    step.append([1, 0])
-    step.append([0, -1])
-    step.append([-1, 0])
-    step.append([1, -1])
-    step.append([-1, 1])
-    step.append([1, 1])
-    step.append([-1, -1])
+class Wall(pygame.sprite.Sprite):
+    def __init__(self, x, y):
+        pygame.sprite.Sprite.__init__(self)
+        self.image = pygame.transform.scale(wall_img, (width * 2, height * 2))
+        self.rect = self.image.get_rect()
+        self.x = x
+        self.y = y
+        self.rect.center = (self.x, self.y)
 
-    for l in range(9):
-        if not(board[i + step[l][0]][j + step[l][1]] == 1 or board[i + step[l][0]][j + step[l][1]] == 0):
-            return False
-    return True
+class Hero(pygame.sprite.Sprite):
+    def __init__(self, start, x, y, img):
+        self.speed_x = 0
+        self.speed_y = 0
+        pygame.sprite.Sprite.__init__(self)
+        self.image = pygame.transform.scale(img, (width, height))
+        self.image.set_colorkey(WHITE)
+        self.rect = self.image.get_rect()
+        self.x = start + x * 40
+        self.y = start + y * 40
+        self.rect.center = (self.x, self.y)
 
-def bild_castle(ind, a, b):
-    global board, mark
-    for i in range(a, a + 3):
-        for j in range(b, b + 3):
-            board[i][j] = mark['castle' + str(ind)]
+    def update(self):
+        if (self.rect.x - 80) % 40 == 0 and (self.rect.y - 80) % 40 == 0:
+            if random.randint(0, 1):
+                if random.randint(0, 1):
+                    self.speed_x = 5
+                else:
+                    self.speed_x = -5
+                self.speed_y = 0
+            else:
+                if random.randint(0, 1):
+                    self.speed_y = 5
+                else:
+                    self.speed_y -= 5
+                self.speed_x = 0
+        self.rect.x += self.speed_x
+        self.rect.y += self.speed_y
 
-def generation_sawmill():
-    global board, mark,  board_size
+class Forest(pygame.sprite.Sprite):
+    def __init__(self, start, x, y, img):
+        pygame.sprite.Sprite.__init__(self)
+        self.image = pygame.transform.scale(img, (width, height))
+        self.rect = self.image.get_rect()
+        self.x = start + x * 40
+        self.y = start + y * 40
+        self.rect.center = (self.x, self.y)
 
-    sawmill_num = int(input())
+class Mine(pygame.sprite.Sprite):
+    def __init__(self, start, x, y, img):
+        pygame.sprite.Sprite.__init__(self)
+        self.image = pygame.transform.scale(img, (width, height))
+        self.rect = self.image.get_rect()
+        self.x = start + x * 40
+        self.y = start + y * 40
+        self.rect.center = (self.x, self.y)
 
-    val = 0
-    while val < sawmill_num:
-        random.seed()
-        i = random.randint(1,  board_size - 2)
-        random.seed()
-        j = random.randint(1,  board_size - 2)
-        if check_place_for_smth(i, j):
-            board[i][j] = mark['sawmill']
-            val += 1
+class Score(pygame.sprite.Sprite):
+    def __init__(self, start, x, y, img):
+        pygame.sprite.Sprite.__init__(self)
+        self.image = pygame.transform.scale(img, (width, height))
+        self.image.set_colorkey(WHITE)
+        self.rect = self.image.get_rect()
+        self.x = start + x * 40
+        self.y = start + y * 40
+        self.rect.center = (self.x, self.y)
 
-def generation_mine():
-    global board, mark, board_size
+def init_Grass():
+    w = 32
+    h = 16
+    start = width * 2 + 20
+    for i in range(w):
+        for j in range(h):
+            all_sprites.add(Grass(start + i * 40, start + j * 40))
 
-    mine_num = int(input())
+def init_Wall():
+    w = 18
+    h = 8
+    start = 40
+    for i in range(0, w):
+        all_sprites.add(Wall(start + i * 80, start))
+    for i in range(0, w):
+        all_sprites.add(Wall(start + i * 80, start + 9 * 80))
 
-    val = 0
-    while val < mine_num:
-        random.seed()
-        i = random.randint(1, board_size - 2)
-        random.seed()
-        j = random.randint(1, board_size - 2)
-        if check_place_for_smth(i, j):
-            board[i][j] = mark['mine']
-            val += 1
+    for i in range(1, h + 1):
+        all_sprites.add(Wall(start, start + i * 80))
+    for i in range(1, h + 1):
+        all_sprites.add(Wall(start + 17 * 80, start + i * 80))
 
-def dfs_forest(i, j):
-    global board, mark, board_size, bot_num, use
+def init_forest(board, h, w, start):
+    for i in range(1, h + 1):
+        for j in range(1, w + 1):
+            if board[i][j] == 'f':
+                all_sprites.add(Forest(start, j - 1, i - 1, forest_img))
 
-    step = []
-    step.append([0, 1])
-    step.append([1, 0])
-    step.append([0, -1])
-    step.append([-1, 0])
-    step.append([1, -1])
-    step.append([-1, 1])
-    step.append([1, 1])
-    step.append([-1, -1])
+def init_mine(board, h, w, start):
+    for i in range(1, h + 1):
+        for j in range(1, w + 1):
+            if board[i][j] == 'm':
+                all_sprites.add(Mine(start, j - 1, i - 1, mine_img))
 
-    if use[i][j] or (not use[i][j]) and board[i][j] != mark['forest']:
-        return
+def init_score():
+    start = 20
+    for i in range(4):
+        all_sprites.add(Score(start, 36, i, coin_img))
 
-    use[i][j] = 1
-    for l in range(8):
-        if 0 < i + step[l][0] < board_size - 1 and 0 < j + step[l][1] < board_size - 1:
-                dfs_forest(i + step[l][0], j + step[l][1])
+sys.stdin = open('input.txt', 'r')
+sys.stdout = open('output.txt', 'w')
 
-    return
+WHITE = (255, 255, 255)
+BLACK = (0, 0, 0)
+RED = (255, 0, 0)
+GREEN = (0, 255, 0)
+BLUE = (0, 0, 255)
 
-def generation_forest():
-    global board, mark, board_size, use
-
-    forest_num = (board_size - 1) * (board_size - 1) // 4
-
-    val = 0
-
-    while val < forest_num:
-        random.seed()
-        i = random.randint(1, board_size - 2)
-        random.seed()
-        j = random.randint(1, board_size - 2)
-        if board[i][j] == 0 or board[i][j] == 1:
-            board[i][j] = mark['forest']
-            val += 1
-
-def main():
-    global board, mark, board_size, bot_num
-    sys.stdin = open('input.txt', 'r')
-    sys.stdout = open('output.txt', 'w')
-
-    bot_num = int(input())
-    mark = {}
-    mark['forest'] = 4
-    mark['sawmill'] = 3
-    mark['mine'] = 2
-    mark['pain'] = 1
-    mark['borders'] = 0
-
-    for i in range(1, bot_num + 1):
-        mark['warrior' + str(i)] = i * 10 + 7
-        mark['worker' + str(i)] = i * 10 + 8
-        mark['castle' + str(i)] = i * 10 + 9
-
-    board_size = int(input())
-    board = [[1 for i in range(board_size)] for i in range(board_size)]
-    for i in range(board_size):
-        board[0][i] = 0
-        board[board_size - 1][i] = 0
-        board[i][0] = 0
-        board[i][board_size - 1] = 0
-
-    if bot_num == 4:
-        bild_castle(1, 1, 1)
-        bild_castle(2, 1, board_size - 4)
-        bild_castle(3, board_size - 4, board_size - 4)
-        bild_castle(4, board_size - 4, 1)
-
-    generation_mine()
-    generation_sawmill()
-    generation_forest()
-
-    write_board_in_file()
-
-    sys.stdin.close()
-    sys.stdout.close()
-    return
+x = 80
+y = 80
+WIDTH = 1561  # ширина игрового окна
+HEIGHT = 801  # высота игрового окна
+FPS = 30  # частота кадров в секунду
+width = 40
+height = 40
 
 
-if __name__ == "__main__":
-    main()
+pygame.init()
+infoObject = pygame.display.Info()
+screen = pygame.display.set_mode((WIDTH, HEIGHT), pygame.FULLSCREEN)
+pygame.display.set_caption("success_code")
+pygame.font.SysFont('Arial', 25)
+
+# настройка папки ассетов
+game_folder = os.path.dirname(__file__)
+img_folder = os.path.join(game_folder, 'img')
+grass_img = pygame.image.load(os.path.join(img_folder, 'grass.png')).convert()
+wall_img = pygame.image.load(os.path.join(img_folder, 'wall.jpg')).convert()
+forest_img = pygame.image.load(os.path.join(img_folder, 'forest.png')).convert()
+mine_img = pygame.image.load(os.path.join(img_folder, 'mine.jpg')).convert()
+coin_img = pygame.image.load(os.path.join(img_folder, 'coin.png')).convert()
+
+hero1_img = pygame.image.load(os.path.join(img_folder, 'hero1.jpg')).convert()
+hero2_img = pygame.image.load(os.path.join(img_folder, 'hero2.jpg')).convert()
+hero3_img = pygame.image.load(os.path.join(img_folder, 'hero3.jpg')).convert()
+hero4_img = pygame.image.load(os.path.join(img_folder, 'hero4.png')).convert()
+
+pygame.mixer.init()
+music_folder = os.path.join(game_folder, 'music')
+pygame.mixer.music.load(os.path.join(music_folder, 'hero.mp3'))
+pygame.mixer.music.play(loops=-1)
+
+clock = pygame.time.Clock()
+
+
+all_sprites = pygame.sprite.Group()
+
+init_Wall()
+init_Grass()
+all_sprites.add(Hero(100, 0, 0, hero1_img))
+all_sprites.add(Hero(100, 31, 0, hero2_img))
+all_sprites.add(Hero(100, 0, 15, hero3_img))
+all_sprites.add(Hero(100, 31, 15, hero4_img))
+
+board = [input().split() for i in range(18)]
+init_forest(board, 16, 32, 100)
+init_mine(board, 16, 32, 100)
+init_score()
+
+running = True
+while running:
+    # Держим цикл на правильной скорости
+    clock.tick(FPS)
+    # Ввод процесса (события)
+    for event in pygame.event.get():
+        # check for closing window
+        if event.type == pygame.QUIT:
+            running = False
+        elif event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_ESCAPE:
+                running = False
+
+
+    #Обновление
+    all_sprites.update()
+    print()
+    # Рендеринг
+    screen.fill(BLACK)
+    all_sprites.draw(screen)
+    for i in range(0, WIDTH, 40):
+            pygame.draw.line(screen, RED, [i, 0], [i, HEIGHT], 1)
+    for i in range(0, HEIGHT, 40):
+            pygame.draw.line(screen, RED, [0, i], [WIDTH, i], 1)
+    # После отрисовки всего, переворачиваем экран
+    pygame.display.flip()
+
+pygame.quit()
+
+sys.stdin.close()
+sys.stdout.close()
