@@ -1,9 +1,77 @@
 import sys
 import random
 import pygame
+import gym
+from gym import spaces
 from pygame import *
 import numpy as np
 import os
+from qlearning import QLearningAgent
+
+class CustomEnv(gym.Env):
+  """Custom Environment that follows gym interface"""
+  metadata = {'render.modes': ['human']}
+
+  def __init__(self):
+    super(CustomEnv, self).__init__()
+    # Define action and observation space
+    # They must be gym.spaces objects
+    # Example when using discrete actions:
+    n_action = 7
+    self.action_space = spaces.Discrete(n_action)
+    # Example for using image as input:
+    n_spaces = 1400
+    self.observation_space = spaces.Discrete(n_spaces)
+
+  def step(self,a, action):
+    reward = 0
+    info = {}
+    done = True
+    if action == 0:
+        Hero.upmove(a)
+        obs = States.states(board)
+    elif action == 1:
+        Hero.leftmove(a)
+        obs = States.states(board)
+    elif action == 2:
+        Hero.rightmove(a)
+        obs = States.states(board)
+    elif action == 3:
+        Hero.downmove(a)
+        obs = States.states(board)
+    elif action == 4:
+        Hero.downmove(a)
+        obs = States.states(board)
+    elif action == 5:
+        Hero.downmove(a)
+        obs = States.states(board)
+    elif action == 6:
+        Hero.downmove(a)
+        obs = States.states(board)
+    elif action == 7:
+        Hero.downmove(a)
+    return obs, reward, done, info
+  def reset(self):
+    sys.stdin = open('input.txt', 'r')
+    board = [input().split() for i in range(18)]
+    sys.stdin.close()
+    obs = hero1.Hero_states
+    return obs  # reward, done, info can't be included
+  def render(mode='human'):
+      # Обновление
+      all_sprites.update()
+      print()
+      # Рендеринг
+      screen.fill(GREEN)
+      all_sprites.draw(screen)
+      for i in range(0, WIDTH, 40):
+          pygame.draw.line(screen, RED, [i, 0], [i, HEIGHT], 1)
+      for i in range(0, HEIGHT, 40):
+          pygame.draw.line(screen, RED, [0, i], [WIDTH, i], 1)
+      # После отрисовки всего, переворачиваем экран
+      pygame.display.flip()
+
+
 
 class States():
     def __init__(self):
@@ -15,9 +83,8 @@ class States():
             for i2 in range(len(sost)):
                 for i3 in range(len(sost)):
                     for i4 in range(len(sost)):
-                        self.cod_status[sost[i1] + sost[i2] + sost[i3] + sost[i4]] = cnt
+                        self.cod_status[cnt] = (sost[i1], sost[i2], sost[i3], sost[i4])
                         cnt += 1
-
 
         self.cod_action['speed_x_up'] = 0
         self.cod_action['speed_x_down'] = 1
@@ -26,8 +93,9 @@ class States():
         self.cod_action['Nm->Mm'] = 4
         self.cod_action['Em->Mm'] = 5
         self.cod_action['attack'] = 6
-
         self.weight = np.zeros((len(self.cod_status), len(self.cod_action)))
+
+
 
 class Grass(pygame.sprite.Sprite):
     def __init__(self, x, y):
@@ -61,7 +129,7 @@ class Hero(pygame.sprite.Sprite):
         self.rect.center = (self.x, self.y)
         self.Hero_states = States()
 
-    def states(self):
+    def move(self):
         if (self.rect.x - 80) % 40 == 0 and (self.rect.y - 80) % 40 == 0:
             sost = ''
             start = 40
@@ -113,29 +181,9 @@ class Hero(pygame.sprite.Sprite):
 
             self.money = 0
 
-    def move_up(self):
-        pass
-
-    def move_down(self):
-        pass
-
-    def move_left(self):
-        pass
-
-    def move_right(self):
-        pass
-
-    def neutral_to_mine(self):
-        pass
-
-    def else_to_mine(self):
-        pass
-
-    def attack(self):
-        pass
-
     def update(self):
         self.rect.x += self.speed_x
+
 
 class Forest(pygame.sprite.Sprite):
     def __init__(self, start, x, y, img):
@@ -235,15 +283,8 @@ def draw_text(surf, text, size, x, y):
     text_rect.midtop = (x, y)
     surf.blit(text_surface, text_rect)
 
-def draw_score(surf, text, size, x, y):
-    font = pygame.font.Font(font_name, size)
-    text_surface = font.render(text, True, GOLD)
-    text_rect = text_surface.get_rect()
-    text_rect.midtop = (x, y)
-    surf.blit(text_surface, text_rect)
-
 def show_go_screen():
-    draw_text(screen, "Game %d" %games, 64, WIDTH / 2, HEIGHT / 4)
+    draw_text(screen, "AI!", 64, WIDTH / 2, HEIGHT / 4)
     #draw_text(screen, "Arrow keys move, Space to fire", 22, WIDTH / 2, HEIGHT / 2)
     draw_text(screen, "Press a key to begin", 18, WIDTH / 2, HEIGHT * 3 / 4)
     pygame.display.flip()
@@ -254,8 +295,7 @@ def show_go_screen():
             if event.type == pygame.QUIT:
                 pygame.quit()
             if event.type == pygame.KEYUP:
-                    waiting = False
-
+                waiting = False
 
 sys.stdin = open('input.txt', 'r')
 sys.stdout = open('output.txt', 'w')
@@ -266,13 +306,10 @@ RED = (255, 0, 0)
 GREEN = (80, 200, 120)
 BLUE = (0, 0, 255)
 GRAY = (217, 217, 217)
-GOLD = (255, 215, 0)
-
-games = 0
 
 x = 80
 y = 80
-WIDTH = 1561  # ширина игрового окна
+WIDTH = 1560  # ширина игрового окна
 HEIGHT = 801  # высота игрового окна
 FPS = 30  # частота кадров в секунду
 width = 40
@@ -280,7 +317,7 @@ height = 40
 
 pygame.init()
 infoObject = pygame.display.Info()
-screen = pygame.display.set_mode((WIDTH, HEIGHT), pygame.FULLSCREEN)
+screen = pygame.display.set_mode((WIDTH, HEIGHT))
 pygame.display.set_caption("success_code")
 font_name = pygame.font.match_font('arial')
 
@@ -332,8 +369,8 @@ all_sprites.add(Mini_hero(100, 35, 4, hero4_img))
 
 show_go_screen()
 pygame.mixer.music.play(loops=-1)
-
-#перезапускать от сюда
+agent = QLearningAgent(alpha=0.5, epsilon=0.25, discount=0.99,
+                       get_legal_actions=lambda s: range(CustomEnv.n_action))
 running = True
 while running:
     # Держим цикл на правильной скорости
@@ -346,25 +383,8 @@ while running:
         elif event.type == pygame.KEYDOWN:
             if event.key == pygame.K_ESCAPE:
                 running = False
+    CustomEnv.render()
 
-    #Обновление
-    all_sprites.update()
-    print()
-    # Рендеринг
-    screen.fill(GREEN)
-    all_sprites.draw(screen)
-    for i in range(0, WIDTH, 40):
-            pygame.draw.line(screen, RED, [i, 0], [i, HEIGHT], 1)
-    for i in range(0, HEIGHT, 40):
-            pygame.draw.line(screen, RED, [0, i], [WIDTH, i], 1)
-    draw_score(screen, "%d" % (hero1.money), 42, WIDTH - 80, HEIGHT / 4 - 165)
-    draw_score(screen, "%d" % (hero2.money), 42, WIDTH - 80, HEIGHT / 4 - 85)
-    draw_score(screen, "%d" % (hero3.money), 42, WIDTH - 80, HEIGHT / 4 - 5)
-    draw_score(screen, "%d" % (hero4.money), 42, WIDTH - 80, HEIGHT / 4 + 75)
-    # После отрисовки всего, переворачиваем экран
-    pygame.display.flip()
-
-#до сюда
 
 pygame.quit()
 
