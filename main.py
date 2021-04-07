@@ -1,9 +1,153 @@
-import sys
-import random
-import pygame
-from pygame import *
-import numpy as np
 import os
+import sys
+
+import gym
+import numpy as np
+import pygame
+from gym import spaces
+from pygame import *
+import random
+from collections import defaultdict
+
+class QLearningAgent:
+    def __init__(self, alpha, epsilon, discount, get_legal_actions, hero):
+        self.hero = hero
+        self.get_legal_actions = get_legal_actions
+        self.qvalues = defaultdict(lambda: defaultdict(lambda: 0))
+        self.alpha = alpha
+        self.epsilon = epsilon
+        self.discount = discount
+
+    def get_qvalue(self, state, action):
+
+        return self.qvalues[state][action]
+
+    def set_qvalue(self, state, action, value):
+
+        self.qvalues[state][action] = value
+
+
+    def get_value(self, state):
+
+        possible_actions = self.get_legal_actions(state)
+
+        if len(possible_actions) == 0:
+            return 0.0
+
+        value = max([self.get_qvalue(state, action)
+                     for action in possible_actions])
+
+        return value
+
+    def update(self, state, action, reward, next_state):
+
+
+        gamma = self.discount
+        learning_rate = self.alpha
+
+        q_value = (1 - learning_rate) * self.get_qvalue(state, action) + learning_rate * (
+                reward + gamma * self.get_value(next_state))
+
+        self.set_qvalue(state, action, q_value)
+
+    def get_best_action(self, state):
+
+        possible_actions = self.get_legal_actions(state)
+
+        # If there are no legal actions, return None
+        if len(possible_actions) == 0:
+            return None
+
+        best_action = max(possible_actions, key=lambda action: self.get_qvalue(state, action))
+
+        return best_action
+
+    def get_action(self, state):
+
+
+        # Pick Action
+        possible_actions = self.get_legal_actions(state)
+        action = None
+
+        # If there are no legal actions, return None
+        if len(possible_actions) == 0:
+            return None
+
+        # agent parameters:
+        epsilon = self.epsilon
+
+        if random.random() < epsilon:
+            action = random.choice(possible_actions)
+        else:
+            action = self.get_best_action(state)
+
+        return action
+
+class CustomEnv(gym.Env):
+    """Custom Environment that follows gym interface"""
+    metadata = {'render.modes': ['human']}
+
+    def __init__(self):
+        super(CustomEnv, self).__init__()
+        # Define action and observation space
+        # They must be gym.spaces objects
+        # Example when using discrete actions:
+        state = States()
+        self.n_action = state.get_nactions()
+        self.action_space = spaces.Discrete(self.n_action)
+        # Example for using image as input:
+        self.n_spaces = state.get_nstates()
+        self.observation_space = spaces.Discrete(self.n_spaces)
+
+    def step(self, action, actor):
+        reward = 0
+        info = {}
+        done = True
+        if action == 0:
+            actor.move_right()
+            obs = actor.states()
+            reward += 0.000001
+        elif action == 1:
+            actor.move_left()
+            obs = actor.states()
+            reward += 0.000001
+        elif action == 2:
+            actor.move_up()
+            obs = actor.states()
+            reward += 0.000001
+        elif action == 3:
+            actor.move_down()
+            obs = actor.states()
+            reward += 0.000001
+        elif action == 4:
+            reward += actor.mine()
+            obs = actor.states()
+        elif action == 5:
+            actor.attack()
+            obs = actor.states()
+        return obs, reward, done, info
+
+    def reset(self):
+        sys.stdin = open('input.txt', 'r')
+        board = [input().split() for i in range(18)]
+        sys.stdin.close()
+        obs = hero1.Hero_states
+        return obs  # reward, done, info can't be included
+
+    def render(mode='human'):
+        # Обновление
+        all_sprites.update()
+        print()
+        # Рендеринг
+        screen.fill(GREEN)
+        all_sprites.draw(screen)
+        for i in range(0, WIDTH, 40):
+            pygame.draw.line(screen, RED, [i, 0], [i, HEIGHT], 1)
+        for i in range(0, HEIGHT, 40):
+            pygame.draw.line(screen, RED, [0, i], [WIDTH, i], 1)
+        # После отрисовки всего, переворачиваем экран
+        pygame.display.flip()
+
 
 class States():
     def __init__(self):
@@ -28,6 +172,12 @@ class States():
 
         self.weight = np.zeros((len(self.cod_status), len(self.cod_action)))
 
+    def get_nactions(self):
+        return len(self.cod_action)
+
+    def get_nstates(self):
+        return len(self.cod_status)
+
 class Grass(pygame.sprite.Sprite):
     def __init__(self, x, y):
         pygame.sprite.Sprite.__init__(self)
@@ -36,6 +186,7 @@ class Grass(pygame.sprite.Sprite):
         self.x = x
         self.y = y
         self.rect.center = (self.x, self.y)
+
 
 class Wall(pygame.sprite.Sprite):
     def __init__(self, x, y):
@@ -46,9 +197,9 @@ class Wall(pygame.sprite.Sprite):
         self.y = y
         self.rect.center = (self.x, self.y)
 
+
 class Hero(pygame.sprite.Sprite):
     def __init__(self, start, x, y, img):
-        self.alive = True
         self.money = 100
         self.speed_x = 0
         self.speed_y = 0
@@ -60,9 +211,10 @@ class Hero(pygame.sprite.Sprite):
         self.y = start + y * 40
         self.rect.center = (self.x, self.y)
         self.Hero_states = States()
+        self.state = self.states()
 
     def states(self):
-        if (self.rect.x - 80) % 40 == 0 and (self.rect.y - 80) % 40 == 0 and self.alive:
+        if (self.rect.x - 80) % 40 == 0 and (self.rect.y - 80) % 40 == 0:
             self.speed_x = 0
             self.speed_y = 0
             sost = ''
@@ -92,59 +244,22 @@ class Hero(pygame.sprite.Sprite):
                 sost += board[(self.rect.y - start) // 40][(self.rect.x - start) // 40 - 1]
 
             return self.Hero_states.cod_status[sost]
-        if not self.alive:
-            self.speed_x = 0
-            self.speed_y = 0
-            self.rect.x = -1000
-            self.rect.y = -1000
 
     def move_up(self):
-        start = 80
-        if board[(self.rect.y - start) // 40 - 1][(self.rect.x - start) // 40] == 'Ng':
-            self.speed_y = -5
-            self.speed_x = 0
-            board[(self.rect.y - start) // 40][(self.rect.x - start) // 40], \
-            board[(self.rect.y - start) // 40 - 1][(self.rect.x - start) // 40] = \
-                board[(self.rect.y - start) // 40 - 1][(self.rect.x - start) // 40], \
-                board[(self.rect.y - start) // 40][(self.rect.x - start) // 40]
-        else:
-            pass
+        self.speed_y = -5
+        self.speed_x = 0
 
     def move_down(self):
-        start = 80
-        if board[(self.rect.y - start) // 40 + 1][(self.rect.x - start) // 40] == 'Ng':
-            self.speed_y = 5
-            self.speed_x = 0
-            board[(self.rect.y - start) // 40][(self.rect.x - start) // 40], \
-            board[(self.rect.y - start) // 40 + 1][(self.rect.x - start) // 40] \
-                = board[(self.rect.y - start) // 40 + 1][(self.rect.x - start) // 40], \
-                  board[(self.rect.y - start) // 40][(self.rect.x - start) // 40]
-        else:
-            pass
+        self.speed_y = 5
+        self.speed_x = 0
 
     def move_left(self):
-        start = 80
-        if board[(self.rect.y - start) // 40][(self.rect.x - start) // 40 - 1] == 'Ng':
-            self.speed_y = 0
-            self.speed_x = -5
-            board[(self.rect.y - start) // 40][(self.rect.x - start) // 40], \
-            board[(self.rect.y - start) // 40][(self.rect.x - start) // 40 - 1] \
-                = board[(self.rect.y - start) // 40][(self.rect.x - start) // 40 - 1], \
-                  board[(self.rect.y - start) // 40][(self.rect.x - start) // 40]
-        else:
-            pass
+        self.speed_y = 0
+        self.speed_x = -5
 
     def move_right(self):
-        start = 80
-        if board[(self.rect.y - start) // 40][(self.rect.x - start) // 40 + 1] == 'Ng':
-            self.speed_y = 0
-            self.speed_x = 5
-            board[(self.rect.y - start) // 40][(self.rect.x - start) // 40], \
-            board[(self.rect.y - start) // 40][(self.rect.x - start) // 40 + 1] \
-                = board[(self.rect.y - start) // 40 + 1][(self.rect.x - start) // 40], \
-                  board[(self.rect.y - start) // 40][(self.rect.x - start) // 40 + 1]
-        else:
-            pass
+        self.speed_y = 0
+        self.speed_x = 5
 
     def mine(self):
         start = 80
@@ -167,7 +282,8 @@ class Hero(pygame.sprite.Sprite):
             board[(self.rect.y - start) // 40][(self.rect.x - start) // 40 - 1] = 'Nm'
 
         else:
-            pass
+            return -20
+        return 10
 
     def attack(self):
         start = 80
@@ -175,250 +291,86 @@ class Hero(pygame.sprite.Sprite):
         self.speed_x = 0
         if board[(self.rect.y - start) // 40 - 1][(self.rect.x - start) // 40][1] == 'h':
             if board[(self.rect.y - start) // 40 - 1][(self.rect.x - start) // 40][0] == 'A':
-                if self.money > hero1.money:
-                    self.money += hero1.money // 4
-                    hero1.money = 0
-                    board[(hero1.rect.y - start) // 40][(hero1.rect.x - start) // 40] = 'Ng'
-                    hero1.alive = False
-                elif self.money < hero1.money:
-                    hero1.money += self.money // 4
-                    self.money = 0
-                    self.alive = False
-                    board[(self.rect.y - start) // 40][(self.rect.x - start) // 40] = 'Ng'
-                else:
-                    hero1.money -= hero1.money // 4
-                    self.money -= self.money // 4
-
+                Ehero = hero1
             elif board[(self.rect.y - start) // 40 - 1][(self.rect.x - start) // 40][0] == 'B':
-                if self.money > hero2.money:
-                    self.money += hero2.money // 4
-                    hero2.money = 0
-                    board[(hero2.rect.y - start) // 40][(hero2.rect.x - start) // 40] = 'Ng'
-                    hero2.alive = False
-                elif self.money < hero2.money:
-                    hero2.money += self.money // 4
-                    self.money = 0
-                    self.alive = False
-                    board[(self.rect.y - start) // 40][(self.rect.x - start) // 40] = 'Ng'
-                else:
-                    hero2.money -= hero2.money // 4
-                    self.money -= self.money // 4
-
+                Ehero = hero2
             elif board[(self.rect.y - start) // 40 - 1][(self.rect.x - start) // 40][0] == 'C':
-                if self.money > hero3.money:
-                    self.money += hero3.money // 4
-                    hero3.money = 0
-                    board[(hero3.rect.y - start) // 40][(hero3.rect.x - start) // 40] = 'Ng'
-                    hero3.alive = False
-                elif self.money < hero3.money:
-                    hero3.money += self.money // 4
-                    self.money = 0
-                    self.alive = False
-                    board[(self.rect.y - start) // 40][(self.rect.x - start) // 40] = 'Ng'
-                else:
-                    hero3.money -= hero3.money // 4
-                    self.money -= self.money // 4
-
+                Ehero = hero3
             elif board[(self.rect.y - start) // 40 - 1][(self.rect.x - start) // 40][0] == 'D':
-                if self.money > hero4.money:
-                    self.money += hero4.money // 4
-                    hero4.money = 0
-                    board[(hero4.rect.y - start) // 40][(hero4.rect.x - start) // 40] = 'Ng'
-                    hero4.alive = False
-                elif self.money < hero4.money:
-                    hero4.money += self.money // 4
-                    self.money = 0
-                    self.alive = False
-                    board[(self.rect.y - start) // 40][(self.rect.x - start) // 40] = 'Ng'
-                else:
-                    hero4.money -= hero4.money // 4
-                    self.money -= self.money // 4
+                Ehero = hero4
+
+            if self.money > Ehero.money:
+                self.money += Ehero.money // 4
+                Ehero.money = 0
+            elif self.money < Ehero.money:
+                Ehero.money += self.money // 4
+                self.money = 0
+            else:
+                Ehero.money -= Ehero.money // 4
+                self.money -= self.money // 4
 
         elif board[(self.rect.y - start) // 40][(self.rect.x - start) // 40 + 1][1] == 'h':
             if board[(self.rect.y - start) // 40][(self.rect.x - start) // 40 + 1][0] == 'A':
-                if self.money > hero1.money:
-                    self.money += hero1.money // 4
-                    hero1.money = 0
-                    board[(hero1.rect.y - start) // 40][(hero1.rect.x - start) // 40] = 'Ng'
-                    hero1.alive = False
-                elif self.money < hero1.money:
-                    hero1.money += self.money // 4
-                    self.money = 0
-                    self.alive = False
-                    board[(self.rect.y - start) // 40][(self.rect.x - start) // 40] = 'Ng'
-                else:
-                    hero1.money -= hero1.money // 4
-                    self.money -= self.money // 4
-
+                Ehero = hero1
             elif board[(self.rect.y - start) // 40][(self.rect.x - start) // 40 + 1][0] == 'B':
-                if self.money > hero2.money:
-                    self.money += hero2.money // 4
-                    hero2.money = 0
-                    board[(hero2.rect.y - start) // 40][(hero2.rect.x - start) // 40] = 'Ng'
-                    hero2.alive = False
-                elif self.money < hero2.money:
-                    hero2.money += self.money // 4
-                    self.money = 0
-                    self.alive = False
-                    board[(self.rect.y - start) // 40][(self.rect.x - start) // 40] = 'Ng'
-                else:
-                    hero2.money -= hero2.money // 4
-                    self.money -= self.money // 4
-
+                Ehero = hero2
             elif board[(self.rect.y - start) // 40][(self.rect.x - start) // 40 + 1][0] == 'C':
-                if self.money > hero3.money:
-                    self.money += hero3.money // 4
-                    hero3.money = 0
-                    board[(hero3.rect.y - start) // 40][(hero3.rect.x - start) // 40] = 'Ng'
-                    hero3.alive = False
-                elif self.money < hero3.money:
-                    hero3.money += self.money // 4
-                    self.money = 0
-                    self.alive = False
-                    board[(self.rect.y - start) // 40][(self.rect.x - start) // 40] = 'Ng'
-                else:
-                    hero3.money -= hero3.money // 4
-                    self.money -= self.money // 4
-
+                Ehero = hero3
             elif board[(self.rect.y - start) // 40][(self.rect.x - start) // 40 + 1][0] == 'D':
-                if self.money > hero4.money:
-                    self.money += hero4.money // 4
-                    hero4.money = 0
-                    board[(hero4.rect.y - start) // 40][(hero4.rect.x - start) // 40] = 'Ng'
-                    hero4.alive = False
-                elif self.money < hero4.money:
-                    hero4.money += self.money // 4
-                    self.money = 0
-                    self.alive = False
-                    board[(self.rect.y - start) // 40][(self.rect.x - start) // 40] = 'Ng'
-                else:
-                    hero4.money -= hero4.money // 4
-                    self.money -= self.money // 4
+                Ehero = hero4
+
+            if self.money > Ehero.money:
+                self.money += Ehero.money // 4
+                Ehero.money = 0
+            elif self.money < Ehero.money:
+                Ehero.money += self.money // 4
+                self.money = 0
+            else:
+                Ehero.money -= Ehero.money // 4
+                self.money -= self.money // 4
 
         elif board[(self.rect.y - start) // 40 + 1][(self.rect.x - start) // 40][1] == 'h':
             if board[(self.rect.y - start) // 40 + 1][(self.rect.x - start) // 40][0] == 'A':
-                if self.money > hero1.money:
-                    self.money += hero1.money // 4
-                    hero1.money = 0
-                    board[(hero1.rect.y - start) // 40][(hero1.rect.x - start) // 40] = 'Ng'
-                    hero1.alive = False
-                elif self.money < hero1.money:
-                    hero1.money += self.money // 4
-                    self.money = 0
-                    self.alive = False
-                    board[(self.rect.y - start) // 40][(self.rect.x - start) // 40] = 'Ng'
-                else:
-                    hero1.money -= hero1.money // 4
-                    self.money -= self.money // 4
-
+                Ehero = hero1
             elif board[(self.rect.y - start) // 40 + 1][(self.rect.x - start) // 40][0] == 'B':
-                if self.money > hero2.money:
-                    self.money += hero2.money // 4
-                    hero2.money = 0
-                    board[(hero2.rect.y - start) // 40][(hero2.rect.x - start) // 40] = 'Ng'
-                    hero2.alive = False
-                elif self.money < hero2.money:
-                    hero2.money += self.money // 4
-                    self.money = 0
-                    self.alive = False
-                    board[(self.rect.y - start) // 40][(self.rect.x - start) // 40] = 'Ng'
-                else:
-                    hero2.money -= hero2.money // 4
-                    self.money -= self.money // 4
-
+                Ehero = hero2
             elif board[(self.rect.y - start) // 40 + 1][(self.rect.x - start) // 40][0] == 'C':
-                if self.money > hero3.money:
-                    self.money += hero3.money // 4
-                    hero3.money = 0
-                    board[(hero3.rect.y - start) // 40][(hero3.rect.x - start) // 40] = 'Ng'
-                    hero3.alive = False
-                elif self.money < hero3.money:
-                    hero3.money += self.money // 4
-                    self.money = 0
-                    self.alive = False
-                    board[(self.rect.y - start) // 40][(self.rect.x - start) // 40] = 'Ng'
-                else:
-                    hero3.money -= hero3.money // 4
-                    self.money -= self.money // 4
-
+                Ehero = hero3
             elif board[(self.rect.y - start) // 40 + 1][(self.rect.x - start) // 40][0] == 'D':
-                if self.money > hero4.money:
-                    self.money += hero4.money // 4
-                    hero4.money = 0
-                    board[(hero4.rect.y - start) // 40][(hero4.rect.x - start) // 40] = 'Ng'
-                    hero4.alive = False
-                elif self.money < hero4.money:
-                    hero4.money += self.money // 4
-                    self.money = 0
-                    self.alive = False
-                    board[(self.rect.y - start) // 40][(self.rect.x - start) // 40] = 'Ng'
-                else:
-                    hero4.money -= hero4.money // 4
-                    self.money -= self.money // 4
+                Ehero = hero4
+
+            if self.money > Ehero.money:
+                self.money += Ehero.money // 4
+                Ehero.money = 0
+            elif self.money < Ehero.money:
+                Ehero.money += self.money // 4
+                self.money = 0
+            else:
+                Ehero.money -= Ehero.money // 4
+                self.money -= self.money // 4
 
         elif board[(self.rect.y - start) // 40][(self.rect.x - start) // 40 - 1][1] == 'h':
             if board[(self.rect.y - start) // 40][(self.rect.x - start) // 40 - 1][0] == 'A':
-                if self.money > hero1.money:
-                    self.money += hero1.money // 4
-                    hero1.money = 0
-                    board[(hero1.rect.y - start) // 40][(hero1.rect.x - start) // 40] = 'Ng'
-                    hero1.alive = False
-                elif self.money < hero1.money:
-                    hero1.money += self.money // 4
-                    self.money = 0
-                    self.alive = False
-                    board[(self.rect.y - start) // 40][(self.rect.x - start) // 40] = 'Ng'
-                else:
-                    hero1.money -= hero1.money // 4
-                    self.money -= self.money // 4
-
+                Ehero = hero1
             elif board[(self.rect.y - start) // 40][(self.rect.x - start) // 40 - 1][0] == 'B':
-                if self.money > hero2.money:
-                    self.money += hero2.money // 4
-                    hero2.money = 0
-                    board[(hero2.rect.y - start) // 40][(hero2.rect.x - start) // 40] = 'Ng'
-                    hero2.alive = False
-                elif self.money < hero2.money:
-                    hero2.money += self.money // 4
-                    self.money = 0
-                    self.alive = False
-                    board[(self.rect.y - start) // 40][(self.rect.x - start) // 40] = 'Ng'
-                else:
-                    hero2.money -= hero2.money // 4
-                    self.money -= self.money // 4
-
+                Ehero = hero2
             elif board[(self.rect.y - start) // 40][(self.rect.x - start) // 40 - 1][0] == 'C':
-                if self.money > hero3.money:
-                    self.money += hero3.money // 4
-                    hero3.money = 0
-                    board[(hero3.rect.y - start) // 40][(hero3.rect.x - start) // 40] = 'Ng'
-                    hero3.alive = False
-                elif self.money < hero3.money:
-                    hero3.money += self.money // 4
-                    self.money = 0
-                    self.alive = False
-                    board[(self.rect.y - start) // 40][(self.rect.x - start) // 40] = 'Ng'
-                else:
-                    hero3.money -= hero3.money // 4
-                    self.money -= self.money // 4
-
+                Ehero = hero3
             elif board[(self.rect.y - start) // 40][(self.rect.x - start) // 40 - 1][0] == 'D':
-                if self.money > hero4.money:
-                    self.money += hero4.money // 4
-                    hero4.money = 0
-                    board[(hero4.rect.y - start) // 40][(hero4.rect.x - start) // 40] = 'Ng'
-                    hero4.alive = False
-                elif self.money < hero4.money:
-                    hero4.money += self.money // 4
-                    self.money = 0
-                    self.alive = False
-                    board[(self.rect.y - start) // 40][(self.rect.x - start) // 40] = 'Ng'
-                else:
-                    hero4.money -= hero4.money // 4
-                    self.money -= self.money // 4
+                Ehero = hero4
+
+            if self.money > Ehero.money:
+                self.money += Ehero.money // 4
+                Ehero.money = 0
+            elif self.money < Ehero.money:
+                Ehero.money += self.money // 4
+                self.money = 0
+            else:
+                Ehero.money -= Ehero.money // 4
+                self.money -= self.money // 4
 
         else:
-            pass
+            return -10
 
     def update(self):
         self.rect.x += self.speed_x
@@ -434,6 +386,7 @@ class Forest(pygame.sprite.Sprite):
         self.y = start + y * 40
         self.rect.center = (self.x, self.y)
 
+
 class Mine(pygame.sprite.Sprite):
     def __init__(self, start, x, y, img):
         pygame.sprite.Sprite.__init__(self)
@@ -443,6 +396,7 @@ class Mine(pygame.sprite.Sprite):
         self.x = start + x * 40
         self.y = start + y * 40
         self.rect.center = (self.x, self.y)
+
 
 class Score(pygame.sprite.Sprite):
     def __init__(self, start, x, y, img):
@@ -454,6 +408,7 @@ class Score(pygame.sprite.Sprite):
         self.y = start + y * 40
         self.rect.center = (self.x, self.y)
 
+
 class Back_ground_score(pygame.sprite.Sprite):
     def __init__(self, start, x, y, w, img):
         pygame.sprite.Sprite.__init__(self)
@@ -463,6 +418,7 @@ class Back_ground_score(pygame.sprite.Sprite):
         self.x = start + x * 40
         self.y = start + y * 40
         self.rect.center = (self.x + width * w // 2 - 20, self.y)
+
 
 class Mini_hero(pygame.sprite.Sprite):
     def __init__(self, start, x, y, img):
@@ -474,6 +430,7 @@ class Mini_hero(pygame.sprite.Sprite):
         self.y = start + y * 40
         self.rect.center = (self.x, self.y)
 
+
 def init_Grass():
     w = 32
     h = 16
@@ -481,6 +438,7 @@ def init_Grass():
     for i in range(w):
         for j in range(h):
             all_sprites.add(Grass(start + i * 40, start + j * 40))
+
 
 def init_Wall():
     w = 18
@@ -496,17 +454,20 @@ def init_Wall():
     for i in range(1, h + 1):
         all_sprites.add(Wall(start + 17 * 80, start + i * 80))
 
+
 def init_forest(board, h, w, start):
     for i in range(1, h + 1):
         for j in range(1, w + 1):
             if board[i][j][1] == 'f':
                 all_sprites.add(Forest(start, j - 1, i - 1, forest_img))
 
+
 def init_mine(board, h, w, start):
     for i in range(1, h + 1):
         for j in range(1, w + 1):
             if board[i][j][1] == 'm':
                 all_sprites.add(Mine(start, j - 1, i - 1, mine_img))
+
 
 def init_score():
     start = 20
@@ -515,6 +476,7 @@ def init_score():
         all_sprites.add(Back_ground_score(100, 33, i * 2 - 1, 4, rect_img))
         all_sprites.add(Score(start, 38, i * 2, coin_img))
 
+
 def draw_text(surf, text, size, x, y):
     font = pygame.font.Font(font_name, size)
     text_surface = font.render(text, True, WHITE)
@@ -522,16 +484,10 @@ def draw_text(surf, text, size, x, y):
     text_rect.midtop = (x, y)
     surf.blit(text_surface, text_rect)
 
-def draw_score(surf, text, size, x, y):
-    font = pygame.font.Font(font_name, size)
-    text_surface = font.render(text, True, GOLD)
-    text_rect = text_surface.get_rect()
-    text_rect.midtop = (x, y)
-    surf.blit(text_surface, text_rect)
 
 def show_go_screen():
-    draw_text(screen, "Game %d" %games, 64, WIDTH / 2, HEIGHT / 4)
-    #draw_text(screen, "Arrow keys move, Space to fire", 22, WIDTH / 2, HEIGHT / 2)
+    draw_text(screen, "AI!", 64, WIDTH / 2, HEIGHT / 4)
+    # draw_text(screen, "Arrow keys move, Space to fire", 22, WIDTH / 2, HEIGHT / 2)
     draw_text(screen, "Press a key to begin", 18, WIDTH / 2, HEIGHT * 3 / 4)
     pygame.display.flip()
     waiting = True
@@ -541,11 +497,10 @@ def show_go_screen():
             if event.type == pygame.QUIT:
                 pygame.quit()
             if event.type == pygame.KEYUP:
-                    waiting = False
+                waiting = False
 
 
 sys.stdin = open('input.txt', 'r')
-sys.stdout = open('output.txt', 'w')
 
 WHITE = (255, 255, 255)
 BLACK = (0, 0, 0)
@@ -553,13 +508,10 @@ RED = (255, 0, 0)
 GREEN = (80, 200, 120)
 BLUE = (0, 0, 255)
 GRAY = (217, 217, 217)
-GOLD = (255, 215, 0)
-
-games = 0
 
 x = 80
 y = 80
-WIDTH = 1561  # ширина игрового окна
+WIDTH = 1560  # ширина игрового окна
 HEIGHT = 801  # высота игрового окна
 FPS = 30  # частота кадров в секунду
 width = 40
@@ -567,7 +519,7 @@ height = 40
 
 pygame.init()
 infoObject = pygame.display.Info()
-screen = pygame.display.set_mode((WIDTH, HEIGHT), pygame.FULLSCREEN)
+screen = pygame.display.set_mode((WIDTH, HEIGHT))
 pygame.display.set_caption("success_code")
 font_name = pygame.font.match_font('arial')
 
@@ -601,7 +553,7 @@ board = [input().split() for i in range(18)]
 init_forest(board, 16, 32, 100)
 init_mine(board, 16, 32, 100)
 init_score()
-
+agents = []
 hero1 = Hero(100, 0, 0, hero1_img)
 hero2 = Hero(100, 31, 0, hero2_img)
 hero3 = Hero(100, 0, 15, hero3_img)
@@ -616,14 +568,57 @@ all_sprites.add(Mini_hero(100, 35, -2, hero1_img))
 all_sprites.add(Mini_hero(100, 35, 0, hero2_img))
 all_sprites.add(Mini_hero(100, 35, 2, hero3_img))
 all_sprites.add(Mini_hero(100, 35, 4, hero4_img))
-
+env = CustomEnv()
 show_go_screen()
 pygame.mixer.music.play(loops=-1)
-
-#перезапускать от сюда
+agent1 = QLearningAgent(alpha=0.5, epsilon=0.99, discount=0.99,
+                        get_legal_actions=lambda s: range(env.n_action), hero = hero1)
+agent2 = QLearningAgent(alpha=0.5, epsilon=0.99, discount=0.99,
+                        get_legal_actions=lambda s: range(env.n_action), hero = hero2)
+agent3 = QLearningAgent(alpha=0.5, epsilon=0.99, discount=0.99,
+                        get_legal_actions=lambda s: range(env.n_action), hero = hero3)
+agent4 = QLearningAgent(alpha=0.5, epsilon=0.99, discount=0.99,
+                        get_legal_actions=lambda s: range(env.n_action), hero = hero4)
+agents.append(agent1)
+agents.append(agent2)
+agents.append(agent3)
+agents.append(agent4)
 running = True
-while running:
+States()
 
+
+
+def play_and_train(env, agents, t_max=10 ** 4):
+    total_reward = 0.0
+    s = env.reset()
+
+    for t in range(t_max):
+        for agent in agents:
+            # get agent to pick action given state s.
+
+            a = agent.get_action(s)
+
+            next_s, r, done, _ = env.step(a, agent.hero)
+
+            # train (update) agent for state s
+            agent.update(s, a, r, next_s)
+            s = next_s
+            total_reward += r
+            if done:
+                break
+
+    return total_reward
+
+rewards = []
+for i in range(1000):
+    rewards.append(play_and_train(env, agents))
+    for agent in agents:
+        agent.epsilon *= 0.99
+    if i % 10 == 0:
+        print(rewards[i])
+
+
+while running:
     # Держим цикл на правильной скорости
     clock.tick(FPS)
     # Ввод процесса (события)
@@ -634,25 +629,7 @@ while running:
         elif event.type == pygame.KEYDOWN:
             if event.key == pygame.K_ESCAPE:
                 running = False
-
-    #Обновление
-    all_sprites.update()
-    print()
-    # Рендеринг
-    screen.fill(GREEN)
-    all_sprites.draw(screen)
-    for i in range(0, WIDTH, 40):
-            pygame.draw.line(screen, RED, [i, 0], [i, HEIGHT], 1)
-    for i in range(0, HEIGHT, 40):
-            pygame.draw.line(screen, RED, [0, i], [WIDTH, i], 1)
-    draw_score(screen, "%d" % (hero1.money), 42, WIDTH - 80, HEIGHT / 4 - 165)
-    draw_score(screen, "%d" % (hero2.money), 42, WIDTH - 80, HEIGHT / 4 - 85)
-    draw_score(screen, "%d" % (hero3.money), 42, WIDTH - 80, HEIGHT / 4 - 5)
-    draw_score(screen, "%d" % (hero4.money), 42, WIDTH - 80, HEIGHT / 4 + 75)
-    # После отрисовки всего, переворачиваем экран
-    pygame.display.flip()
-
-#до сюда
+    CustomEnv.render()
 
 pygame.quit()
 
