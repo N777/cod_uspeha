@@ -1,101 +1,182 @@
+import os
 import sys
-import random
-import pygame
+
 import gym
+import numpy as np
+import pygame
 from gym import spaces
 from pygame import *
-import numpy as np
-import os
-from qlearning import QLearningAgent
+import random
+from collections import defaultdict
+
+class QLearningAgent:
+    def __init__(self, alpha, epsilon, discount, get_legal_actions, hero):
+        self.hero = hero
+        self.get_legal_actions = get_legal_actions
+        self.qvalues = defaultdict(lambda: defaultdict(lambda: 0))
+        self.alpha = alpha
+        self.epsilon = epsilon
+        self.discount = discount
+
+    def get_qvalue(self, state, action):
+
+        return self.qvalues[state][action]
+
+    def set_qvalue(self, state, action, value):
+
+        self.qvalues[state][action] = value
+
+
+    def get_value(self, state):
+
+        possible_actions = self.get_legal_actions(state)
+
+        if len(possible_actions) == 0:
+            return 0.0
+
+        value = max([self.get_qvalue(state, action)
+                     for action in possible_actions])
+
+        return value
+
+    def update(self, state, action, reward, next_state):
+
+
+        gamma = self.discount
+        learning_rate = self.alpha
+
+        q_value = (1 - learning_rate) * self.get_qvalue(state, action) + learning_rate * (
+                reward + gamma * self.get_value(next_state))
+
+        self.set_qvalue(state, action, q_value)
+
+    def get_best_action(self, state):
+
+        possible_actions = self.get_legal_actions(state)
+
+        # If there are no legal actions, return None
+        if len(possible_actions) == 0:
+            return None
+
+        best_action = max(possible_actions, key=lambda action: self.get_qvalue(state, action))
+
+        return best_action
+
+    def get_action(self, state):
+
+
+        # Pick Action
+        possible_actions = self.get_legal_actions(state)
+        action = None
+
+        # If there are no legal actions, return None
+        if len(possible_actions) == 0:
+            return None
+
+        # agent parameters:
+        epsilon = self.epsilon
+
+        if random.random() < epsilon:
+            action = random.choice(possible_actions)
+        else:
+            action = self.get_best_action(state)
+
+        return action
 
 class CustomEnv(gym.Env):
-  """Custom Environment that follows gym interface"""
-  metadata = {'render.modes': ['human']}
+    """Custom Environment that follows gym interface"""
+    metadata = {'render.modes': ['human']}
 
-  def __init__(self):
-    super(CustomEnv, self).__init__()
-    # Define action and observation space
-    # They must be gym.spaces objects
-    # Example when using discrete actions:
-    n_action = 7
-    self.action_space = spaces.Discrete(n_action)
-    # Example for using image as input:
-    n_spaces = 1400
-    self.observation_space = spaces.Discrete(n_spaces)
+    def __init__(self):
+        super(CustomEnv, self).__init__()
+        # Define action and observation space
+        # They must be gym.spaces objects
+        # Example when using discrete actions:
+        state = States()
+        self.n_action = state.get_nactions()
+        self.action_space = spaces.Discrete(self.n_action)
+        # Example for using image as input:
+        self.n_spaces = state.get_nstates()
+        self.observation_space = spaces.Discrete(self.n_spaces)
 
-  def step(self,a, action):
-    reward = 0
-    info = {}
-    done = True
-    if action == 0:
-        Hero.upmove(a)
-        obs = States.states(board)
-    elif action == 1:
-        Hero.leftmove(a)
-        obs = States.states(board)
-    elif action == 2:
-        Hero.rightmove(a)
-        obs = States.states(board)
-    elif action == 3:
-        Hero.downmove(a)
-        obs = States.states(board)
-    elif action == 4:
-        Hero.downmove(a)
-        obs = States.states(board)
-    elif action == 5:
-        Hero.downmove(a)
-        obs = States.states(board)
-    elif action == 6:
-        Hero.downmove(a)
-        obs = States.states(board)
-    elif action == 7:
-        Hero.downmove(a)
-    return obs, reward, done, info
-  def reset(self):
-    sys.stdin = open('input.txt', 'r')
-    board = [input().split() for i in range(18)]
-    sys.stdin.close()
-    obs = hero1.Hero_states
-    return obs  # reward, done, info can't be included
-  def render(mode='human'):
-      # Обновление
-      all_sprites.update()
-      print()
-      # Рендеринг
-      screen.fill(GREEN)
-      all_sprites.draw(screen)
-      for i in range(0, WIDTH, 40):
-          pygame.draw.line(screen, RED, [i, 0], [i, HEIGHT], 1)
-      for i in range(0, HEIGHT, 40):
-          pygame.draw.line(screen, RED, [0, i], [WIDTH, i], 1)
-      # После отрисовки всего, переворачиваем экран
-      pygame.display.flip()
+    def step(self, action, actor):
+        reward = 0
+        info = {}
+        done = True
+        if action == 0:
+            actor.move_right()
+            obs = actor.states()
+            reward += 0.000001
+        elif action == 1:
+            actor.move_left()
+            obs = actor.states()
+            reward += 0.000001
+        elif action == 2:
+            actor.move_up()
+            obs = actor.states()
+            reward += 0.000001
+        elif action == 3:
+            actor.move_down()
+            obs = actor.states()
+            reward += 0.000001
+        elif action == 4:
+            reward += actor.mine()
+            obs = actor.states()
+        elif action == 5:
+            actor.attack()
+            obs = actor.states()
+        return obs, reward, done, info
 
+    def reset(self):
+        sys.stdin = open('input.txt', 'r')
+        board = [input().split() for i in range(18)]
+        sys.stdin.close()
+        obs = hero1.Hero_states
+        return obs  # reward, done, info can't be included
+
+    def render(mode='human'):
+        # Обновление
+        all_sprites.update()
+        print()
+        # Рендеринг
+        screen.fill(GREEN)
+        all_sprites.draw(screen)
+        for i in range(0, WIDTH, 40):
+            pygame.draw.line(screen, RED, [i, 0], [i, HEIGHT], 1)
+        for i in range(0, HEIGHT, 40):
+            pygame.draw.line(screen, RED, [0, i], [WIDTH, i], 1)
+        # После отрисовки всего, переворачиваем экран
+        pygame.display.flip()
 
 
 class States():
     def __init__(self):
         self.cod_action = {}
         self.cod_status = {}
-        sost = ['Nw', 'Ng', 'Nf', 'Nm', 'Eh', 'Mm', 'Em']
+        sost = ['Nw', 'Ng', 'Nf', 'Nm', 'Eh']
         cnt = 0
         for i1 in range(len(sost)):
             for i2 in range(len(sost)):
                 for i3 in range(len(sost)):
                     for i4 in range(len(sost)):
-                        self.cod_status[cnt] = (sost[i1], sost[i2], sost[i3], sost[i4])
+                        self.cod_status[sost[i1] + sost[i2] + sost[i3] + sost[i4]] = cnt
                         cnt += 1
+
 
         self.cod_action['speed_x_up'] = 0
         self.cod_action['speed_x_down'] = 1
         self.cod_action['speed_y_up'] = 2
         self.cod_action['speed_y_down'] = 3
-        self.cod_action['Nm->Mm'] = 4
-        self.cod_action['Em->Mm'] = 5
-        self.cod_action['attack'] = 6
+        self.cod_action['mine'] = 4
+        self.cod_action['attack'] = 5
+
         self.weight = np.zeros((len(self.cod_status), len(self.cod_action)))
 
+    def get_nactions(self):
+        return len(self.cod_action)
 
+    def get_nstates(self):
+        return len(self.cod_status)
 
 class Grass(pygame.sprite.Sprite):
     def __init__(self, x, y):
@@ -106,6 +187,7 @@ class Grass(pygame.sprite.Sprite):
         self.y = y
         self.rect.center = (self.x, self.y)
 
+
 class Wall(pygame.sprite.Sprite):
     def __init__(self, x, y):
         pygame.sprite.Sprite.__init__(self)
@@ -114,6 +196,7 @@ class Wall(pygame.sprite.Sprite):
         self.x = x
         self.y = y
         self.rect.center = (self.x, self.y)
+
 
 class Hero(pygame.sprite.Sprite):
     def __init__(self, start, x, y, img):
@@ -128,62 +211,170 @@ class Hero(pygame.sprite.Sprite):
         self.y = start + y * 40
         self.rect.center = (self.x, self.y)
         self.Hero_states = States()
+        self.state = self.states()
 
-    def move(self):
+    def states(self):
         if (self.rect.x - 80) % 40 == 0 and (self.rect.y - 80) % 40 == 0:
+            self.speed_x = 0
+            self.speed_y = 0
             sost = ''
             start = 40
             # верх
-            if board[(self.rect.y - start) // 40 - 1][(self.rect.x - start) // 40][0] == \
-                    board[(self.rect.y - start) // 40][(self.rect.x - start) // 40][0]:
-                sost += 'Mm'
-            elif board[(self.rect.y - start) // 40 - 1][(self.rect.x - start) // 40][0] != \
-                    board[(self.rect.y - start) // 40][(self.rect.x - start) // 40][0] and \
-                    board[(self.rect.y - start) // 40 - 1][(self.rect.x - start) // 40][0] != 'N':
-                sost += 'E' + board[(self.rect.y - start) // 40 - 1][(self.rect.x - start) // 40][1]
+            if board[(self.rect.y - start) // 40 - 1][(self.rect.x - start) // 40][1] == 'h':
+                sost += 'Eh'
             else:
                 sost += board[(self.rect.y - start) // 40 - 1][(self.rect.x - start) // 40]
 
             # право
-            if board[(self.rect.y - start) // 40][(self.rect.x - start) // 40 + 1][0] == \
-                    board[(self.rect.y - start) // 40][(self.rect.x - start) // 40][0]:
-                sost += 'Mm'
-            elif board[(self.rect.y - start) // 40][(self.rect.x - start) // 40 + 1][0] != \
-                    board[(self.rect.y - start) // 40][(self.rect.x - start) // 40][0] and \
-                    board[(self.rect.y - start) // 40][(self.rect.x - start) // 40 + 1][0] != 'N':
-                sost += 'E' + board[(self.rect.y - start) // 40][(self.rect.x - start) // 40 + 1][1]
+            if board[(self.rect.y - start) // 40][(self.rect.x - start) // 40 + 1][1] == 'h':
+                sost += 'Eh'
             else:
                 sost += board[(self.rect.y - start) // 40][(self.rect.x - start) // 40 + 1]
 
             # низ
-            if board[(self.rect.y - start) // 40 + 1][(self.rect.x - start) // 40][0] == \
-                    board[(self.rect.y - start) // 40][(self.rect.x - start) // 40][0]:
-                sost += 'Mm'
-            elif board[(self.rect.y - start) // 40 + 1][(self.rect.x - start) // 40][0] != \
-                    board[(self.rect.y - start) // 40][(self.rect.x - start) // 40][0] and \
-                    board[(self.rect.y - start) // 40 + 1][(self.rect.x - start) // 40][0] != 'N':
-                sost += 'E' + board[(self.rect.y - start) // 40 - 1][(self.rect.x - start) // 40][1]
+            if board[(self.rect.y - start) // 40 + 1][(self.rect.x - start) // 40][1] == 'h':
+                sost += 'Eh'
             else:
-                sost += board[(self.rect.y - start) // 40 - 1][(self.rect.x - start) // 40]
+                sost += board[(self.rect.y - start) // 40 + 1][(self.rect.x - start) // 40]
 
             # лево
-            if board[(self.rect.y - start) // 40][(self.rect.x - start) // 40 - 1][0] == \
-                    board[(self.rect.y - start) // 40][(self.rect.x - start) // 40][0]:
-                sost += 'Mm'
-            elif board[(self.rect.y - start) // 40][(self.rect.x - start) // 40 - 1][0] != \
-                    board[(self.rect.y - start) // 40][(self.rect.x - start) // 40][0] and \
-                    board[(self.rect.y - start) // 40][(self.rect.x - start) // 40 - 1][0] != 'N':
-                sost += 'E' + board[(self.rect.y - start) // 40][(self.rect.x - start) // 40 - 1][1]
+            if board[(self.rect.y - start) // 40][(self.rect.x - start) // 40 - 1][1] == 'h':
+                sost += 'Eh'
             else:
                 sost += board[(self.rect.y - start) // 40][(self.rect.x - start) // 40 - 1]
 
-            # AI
+            return self.Hero_states.cod_status[sost]
 
-            self.money = 0
+    def move_up(self):
+        self.speed_y = -5
+        self.speed_x = 0
+
+    def move_down(self):
+        self.speed_y = 5
+        self.speed_x = 0
+
+    def move_left(self):
+        self.speed_y = 0
+        self.speed_x = -5
+
+    def move_right(self):
+        self.speed_y = 0
+        self.speed_x = 5
+
+    def mine(self):
+        start = 80
+        self.speed_y = 0
+        self.speed_x = 0
+        if board[(self.rect.y - start) // 40 - 1][(self.rect.x - start) // 40] == 'Fm':
+            self.money += 50
+            board[(self.rect.y - start) // 40 - 1][(self.rect.x - start) // 40] = 'Nm'
+
+        elif board[(self.rect.y - start) // 40][(self.rect.x - start) // 40 + 1] == 'Fm':
+            self.money += 50
+            board[(self.rect.y - start) // 40][(self.rect.x - start) // 40 + 1] = 'Nm'
+
+        elif board[(self.rect.y - start) // 40 + 1][(self.rect.x - start) // 40] == 'Fm':
+            self.money += 50
+            board[(self.rect.y - start) // 40 + 1][(self.rect.x - start) // 40] = 'Nm'
+
+        elif board[(self.rect.y - start) // 40][(self.rect.x - start) // 40 - 1] == 'Fm':
+            self.money += 50
+            board[(self.rect.y - start) // 40][(self.rect.x - start) // 40 - 1] = 'Nm'
+
+        else:
+            return -20
+        return 10
+
+    def attack(self):
+        start = 80
+        self.speed_y = 0
+        self.speed_x = 0
+        if board[(self.rect.y - start) // 40 - 1][(self.rect.x - start) // 40][1] == 'h':
+            if board[(self.rect.y - start) // 40 - 1][(self.rect.x - start) // 40][0] == 'A':
+                Ehero = hero1
+            elif board[(self.rect.y - start) // 40 - 1][(self.rect.x - start) // 40][0] == 'B':
+                Ehero = hero2
+            elif board[(self.rect.y - start) // 40 - 1][(self.rect.x - start) // 40][0] == 'C':
+                Ehero = hero3
+            elif board[(self.rect.y - start) // 40 - 1][(self.rect.x - start) // 40][0] == 'D':
+                Ehero = hero4
+
+            if self.money > Ehero.money:
+                self.money += Ehero.money // 4
+                Ehero.money = 0
+            elif self.money < Ehero.money:
+                Ehero.money += self.money // 4
+                self.money = 0
+            else:
+                Ehero.money -= Ehero.money // 4
+                self.money -= self.money // 4
+
+        elif board[(self.rect.y - start) // 40][(self.rect.x - start) // 40 + 1][1] == 'h':
+            if board[(self.rect.y - start) // 40][(self.rect.x - start) // 40 + 1][0] == 'A':
+                Ehero = hero1
+            elif board[(self.rect.y - start) // 40][(self.rect.x - start) // 40 + 1][0] == 'B':
+                Ehero = hero2
+            elif board[(self.rect.y - start) // 40][(self.rect.x - start) // 40 + 1][0] == 'C':
+                Ehero = hero3
+            elif board[(self.rect.y - start) // 40][(self.rect.x - start) // 40 + 1][0] == 'D':
+                Ehero = hero4
+
+            if self.money > Ehero.money:
+                self.money += Ehero.money // 4
+                Ehero.money = 0
+            elif self.money < Ehero.money:
+                Ehero.money += self.money // 4
+                self.money = 0
+            else:
+                Ehero.money -= Ehero.money // 4
+                self.money -= self.money // 4
+
+        elif board[(self.rect.y - start) // 40 + 1][(self.rect.x - start) // 40][1] == 'h':
+            if board[(self.rect.y - start) // 40 + 1][(self.rect.x - start) // 40][0] == 'A':
+                Ehero = hero1
+            elif board[(self.rect.y - start) // 40 + 1][(self.rect.x - start) // 40][0] == 'B':
+                Ehero = hero2
+            elif board[(self.rect.y - start) // 40 + 1][(self.rect.x - start) // 40][0] == 'C':
+                Ehero = hero3
+            elif board[(self.rect.y - start) // 40 + 1][(self.rect.x - start) // 40][0] == 'D':
+                Ehero = hero4
+
+            if self.money > Ehero.money:
+                self.money += Ehero.money // 4
+                Ehero.money = 0
+            elif self.money < Ehero.money:
+                Ehero.money += self.money // 4
+                self.money = 0
+            else:
+                Ehero.money -= Ehero.money // 4
+                self.money -= self.money // 4
+
+        elif board[(self.rect.y - start) // 40][(self.rect.x - start) // 40 - 1][1] == 'h':
+            if board[(self.rect.y - start) // 40][(self.rect.x - start) // 40 - 1][0] == 'A':
+                Ehero = hero1
+            elif board[(self.rect.y - start) // 40][(self.rect.x - start) // 40 - 1][0] == 'B':
+                Ehero = hero2
+            elif board[(self.rect.y - start) // 40][(self.rect.x - start) // 40 - 1][0] == 'C':
+                Ehero = hero3
+            elif board[(self.rect.y - start) // 40][(self.rect.x - start) // 40 - 1][0] == 'D':
+                Ehero = hero4
+
+            if self.money > Ehero.money:
+                self.money += Ehero.money // 4
+                Ehero.money = 0
+            elif self.money < Ehero.money:
+                Ehero.money += self.money // 4
+                self.money = 0
+            else:
+                Ehero.money -= Ehero.money // 4
+                self.money -= self.money // 4
+
+        else:
+            return -10
 
     def update(self):
         self.rect.x += self.speed_x
-
+        self.rect.y += self.speed_y
 
 class Forest(pygame.sprite.Sprite):
     def __init__(self, start, x, y, img):
@@ -195,6 +386,7 @@ class Forest(pygame.sprite.Sprite):
         self.y = start + y * 40
         self.rect.center = (self.x, self.y)
 
+
 class Mine(pygame.sprite.Sprite):
     def __init__(self, start, x, y, img):
         pygame.sprite.Sprite.__init__(self)
@@ -204,6 +396,7 @@ class Mine(pygame.sprite.Sprite):
         self.x = start + x * 40
         self.y = start + y * 40
         self.rect.center = (self.x, self.y)
+
 
 class Score(pygame.sprite.Sprite):
     def __init__(self, start, x, y, img):
@@ -215,6 +408,7 @@ class Score(pygame.sprite.Sprite):
         self.y = start + y * 40
         self.rect.center = (self.x, self.y)
 
+
 class Back_ground_score(pygame.sprite.Sprite):
     def __init__(self, start, x, y, w, img):
         pygame.sprite.Sprite.__init__(self)
@@ -224,6 +418,7 @@ class Back_ground_score(pygame.sprite.Sprite):
         self.x = start + x * 40
         self.y = start + y * 40
         self.rect.center = (self.x + width * w // 2 - 20, self.y)
+
 
 class Mini_hero(pygame.sprite.Sprite):
     def __init__(self, start, x, y, img):
@@ -235,6 +430,7 @@ class Mini_hero(pygame.sprite.Sprite):
         self.y = start + y * 40
         self.rect.center = (self.x, self.y)
 
+
 def init_Grass():
     w = 32
     h = 16
@@ -242,6 +438,7 @@ def init_Grass():
     for i in range(w):
         for j in range(h):
             all_sprites.add(Grass(start + i * 40, start + j * 40))
+
 
 def init_Wall():
     w = 18
@@ -257,17 +454,20 @@ def init_Wall():
     for i in range(1, h + 1):
         all_sprites.add(Wall(start + 17 * 80, start + i * 80))
 
+
 def init_forest(board, h, w, start):
     for i in range(1, h + 1):
         for j in range(1, w + 1):
             if board[i][j][1] == 'f':
                 all_sprites.add(Forest(start, j - 1, i - 1, forest_img))
 
+
 def init_mine(board, h, w, start):
     for i in range(1, h + 1):
         for j in range(1, w + 1):
             if board[i][j][1] == 'm':
                 all_sprites.add(Mine(start, j - 1, i - 1, mine_img))
+
 
 def init_score():
     start = 20
@@ -276,6 +476,7 @@ def init_score():
         all_sprites.add(Back_ground_score(100, 33, i * 2 - 1, 4, rect_img))
         all_sprites.add(Score(start, 38, i * 2, coin_img))
 
+
 def draw_text(surf, text, size, x, y):
     font = pygame.font.Font(font_name, size)
     text_surface = font.render(text, True, WHITE)
@@ -283,9 +484,10 @@ def draw_text(surf, text, size, x, y):
     text_rect.midtop = (x, y)
     surf.blit(text_surface, text_rect)
 
+
 def show_go_screen():
     draw_text(screen, "AI!", 64, WIDTH / 2, HEIGHT / 4)
-    #draw_text(screen, "Arrow keys move, Space to fire", 22, WIDTH / 2, HEIGHT / 2)
+    # draw_text(screen, "Arrow keys move, Space to fire", 22, WIDTH / 2, HEIGHT / 2)
     draw_text(screen, "Press a key to begin", 18, WIDTH / 2, HEIGHT * 3 / 4)
     pygame.display.flip()
     waiting = True
@@ -297,8 +499,8 @@ def show_go_screen():
             if event.type == pygame.KEYUP:
                 waiting = False
 
+
 sys.stdin = open('input.txt', 'r')
-sys.stdout = open('output.txt', 'w')
 
 WHITE = (255, 255, 255)
 BLACK = (0, 0, 0)
@@ -351,7 +553,7 @@ board = [input().split() for i in range(18)]
 init_forest(board, 16, 32, 100)
 init_mine(board, 16, 32, 100)
 init_score()
-
+agents = []
 hero1 = Hero(100, 0, 0, hero1_img)
 hero2 = Hero(100, 31, 0, hero2_img)
 hero3 = Hero(100, 0, 15, hero3_img)
@@ -366,12 +568,56 @@ all_sprites.add(Mini_hero(100, 35, -2, hero1_img))
 all_sprites.add(Mini_hero(100, 35, 0, hero2_img))
 all_sprites.add(Mini_hero(100, 35, 2, hero3_img))
 all_sprites.add(Mini_hero(100, 35, 4, hero4_img))
-
+env = CustomEnv()
 show_go_screen()
 pygame.mixer.music.play(loops=-1)
-agent = QLearningAgent(alpha=0.5, epsilon=0.25, discount=0.99,
-                       get_legal_actions=lambda s: range(CustomEnv.n_action))
+agent1 = QLearningAgent(alpha=0.5, epsilon=0.99, discount=0.99,
+                        get_legal_actions=lambda s: range(env.n_action), hero = hero1)
+agent2 = QLearningAgent(alpha=0.5, epsilon=0.99, discount=0.99,
+                        get_legal_actions=lambda s: range(env.n_action), hero = hero2)
+agent3 = QLearningAgent(alpha=0.5, epsilon=0.99, discount=0.99,
+                        get_legal_actions=lambda s: range(env.n_action), hero = hero3)
+agent4 = QLearningAgent(alpha=0.5, epsilon=0.99, discount=0.99,
+                        get_legal_actions=lambda s: range(env.n_action), hero = hero4)
+agents.append(agent1)
+agents.append(agent2)
+agents.append(agent3)
+agents.append(agent4)
 running = True
+States()
+
+
+
+def play_and_train(env, agents, t_max=10 ** 4):
+    total_reward = 0.0
+    s = env.reset()
+
+    for t in range(t_max):
+        for agent in agents:
+            # get agent to pick action given state s.
+
+            a = agent.get_action(s)
+
+            next_s, r, done, _ = env.step(a, agent.hero)
+
+            # train (update) agent for state s
+            agent.update(s, a, r, next_s)
+            s = next_s
+            total_reward += r
+            if done:
+                break
+
+    return total_reward
+
+rewards = []
+for i in range(1000):
+    rewards.append(play_and_train(env, agents))
+    for agent in agents:
+        agent.epsilon *= 0.99
+    if i % 10 == 0:
+        print(rewards[i])
+
+
 while running:
     # Держим цикл на правильной скорости
     clock.tick(FPS)
@@ -384,7 +630,6 @@ while running:
             if event.key == pygame.K_ESCAPE:
                 running = False
     CustomEnv.render()
-
 
 pygame.quit()
 
