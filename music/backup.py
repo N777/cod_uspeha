@@ -13,53 +13,21 @@ from collections import defaultdict
 class QLearningAgent:
     def __init__(self, alpha, epsilon, discount, get_legal_actions, hero):
         self.hero = hero
+        state = States()
+
         self.get_legal_actions = get_legal_actions
-        self.qvalues = defaultdict(lambda: defaultdict(lambda: 0))
+        self.qtable = np.zeros((state.get_nstates(), state.get_nactions()))
         self.alpha = alpha
         self.epsilon = epsilon
         self.discount = discount
-
-    def get_qvalue(self, state, action):
-
-        return self.qvalues[state][action]
-
-    def set_qvalue(self, state, action, value):
-
-        self.qvalues[state][action] = value
-
-    def get_value(self, state):
-
-        possible_actions = self.get_legal_actions(state)
-
-        if len(possible_actions) == 0:
-            return 0.0
-
-        value = max([self.get_qvalue(state, action)
-                     for action in possible_actions])
-
-        return value
 
     def update(self, state, action, reward, next_state):
 
         gamma = self.discount
         learning_rate = self.alpha
 
-        q_value = (1 - learning_rate) * self.get_qvalue(state, action) + learning_rate * (
-                reward + gamma * self.get_value(next_state))
-
-        self.set_qvalue(state, action, q_value)
-
-    def get_best_action(self, state):
-
-        possible_actions = self.get_legal_actions(state)
-
-        # If there are no legal actions, return None
-        if len(possible_actions) == 0:
-            return None
-
-        best_action = max(possible_actions, key=lambda action: self.get_qvalue(state, action))
-
-        return best_action
+        self.qtable[state, action] = self.qtable[state, action] + learning_rate * (
+                reward + gamma * np.max(self.qtable[next_state, :]) - self.qtable[state, action])
 
     def get_action(self, state):
 
@@ -74,10 +42,11 @@ class QLearningAgent:
         # agent parameters:
         epsilon = self.epsilon
 
-        if random.random() < epsilon:
-            action = random.choice(possible_actions)
+        if random.random() > epsilon:
+            action = np.argmax(self.qtable[state, :])
+            # Else doing a random choice --> exploration
         else:
-            action = self.get_best_action(state)
+            action = random.choice(possible_actions)
 
         return action
 
@@ -100,39 +69,38 @@ class CustomEnv(gym.Env):
 
     def step(self, action, actor):
         reward = 0
-        info = []
+        info = {}
         done = True
         if action == 0:
-
+            obs = actor.states()
             reward += actor.move_right()
-            obs = actor.state
+
         elif action == 1:
-
+            obs = actor.states()
             reward += actor.move_left()
-            obs = actor.state
+
         elif action == 2:
-
+            obs = actor.states()
             reward += actor.move_up()
-            obs = actor.state
+
         elif action == 3:
-
+            obs = actor.states()
             reward += actor.move_down()
-            obs = actor.state
+
         elif action == 4:
-
+            obs = actor.states()
             reward += actor.mine()
-            obs = actor.state
-        elif action == 5:
 
+        elif action == 5:
+            obs = actor.states()
             reward += actor.attack()
-            obs = actor.state
+
         return obs, reward, done, info
 
     def reset(self):
 
         sys.stdin = open('input.txt', 'r')
         board = [input().split() for i in range(18)]
-        sys.stdin.close()
         hero1.reset()
         hero2.reset()
         hero3.reset()
@@ -235,6 +203,7 @@ class Hero(pygame.sprite.Sprite):
         self.speed_y = 0
         self.rect.center = (self.x, self.y)
 
+
     def states(self):
         global board
         if (self.rect.x - 80) % 40 == 0 and (self.rect.y - 80) % 40 == 0 and self.alive:
@@ -272,14 +241,10 @@ class Hero(pygame.sprite.Sprite):
             self.speed_y = 0
             self.rect.x = -1000
             self.rect.y = -1000
-            return 0
-        return 0
 
     def move_up(self):
         global board
         if (self.rect.x - 80) % 40 == 0 and (self.rect.y - 80) % 40 == 0 and self.alive:
-            self.speed_x = 0
-            self.speed_y = 0
             start = 40
             if board[(self.rect.y - start) // 40 - 1][(self.rect.x - start) // 40] == 'Ng':
                 self.speed_y = -5
@@ -291,13 +256,11 @@ class Hero(pygame.sprite.Sprite):
             else:
                 return -20
             return -0.1
-        return -0.00001
+        return 0
 
     def move_down(self):
         global board
         if (self.rect.x - 80) % 40 == 0 and (self.rect.y - 80) % 40 == 0 and self.alive:
-            self.speed_x = 0
-            self.speed_y = 0
             start = 40
             if board[(self.rect.y - start) // 40 + 1][(self.rect.x - start) // 40] == 'Ng':
                 self.speed_y = 5
@@ -309,13 +272,11 @@ class Hero(pygame.sprite.Sprite):
             else:
                 return -20
             return -0.1
-        return -0.00001
+        return 0
 
     def move_left(self):
         global board
         if (self.rect.x - 80) % 40 == 0 and (self.rect.y - 80) % 40 == 0 and self.alive:
-            self.speed_x = 0
-            self.speed_y = 0
             start = 40
             if board[(self.rect.y - start) // 40][(self.rect.x - start) // 40 - 1] == 'Ng':
                 self.speed_y = 0
@@ -327,31 +288,27 @@ class Hero(pygame.sprite.Sprite):
             else:
                 return -20
             return -0.1
-        return -0.00001
+        return 0
 
     def move_right(self):
         global board
         if (self.rect.x - 80) % 40 == 0 and (self.rect.y - 80) % 40 == 0 and self.alive:
-            self.speed_x = 0
-            self.speed_y = 0
             start = 40
             if board[(self.rect.y - start) // 40][(self.rect.x - start) // 40 + 1] == 'Ng':
                 self.speed_y = 0
                 self.speed_x = 5
                 board[(self.rect.y - start) // 40][(self.rect.x - start) // 40], \
                 board[(self.rect.y - start) // 40][(self.rect.x - start) // 40 + 1] \
-                    = board[(self.rect.y - start) // 40][(self.rect.x - start) // 40 + 1], \
-                      board[(self.rect.y - start) // 40][(self.rect.x - start) // 40]
+                    = board[(self.rect.y - start) // 40 + 1][(self.rect.x - start) // 40], \
+                      board[(self.rect.y - start) // 40][(self.rect.x - start) // 40 + 1]
             else:
                 return -20
             return -0.1
-        return -0.00001
+        return 0
 
     def mine(self):
         global board
         if (self.rect.x - 80) % 40 == 0 and (self.rect.y - 80) % 40 == 0 and self.alive:
-            self.speed_x = 0
-            self.speed_y = 0
             start = 40
             if board[(self.rect.y - start) // 40 - 1][(self.rect.x - start) // 40] == 'Fm':
                 self.money += 50
@@ -377,8 +334,6 @@ class Hero(pygame.sprite.Sprite):
     def attack(self):
         global board
         if (self.rect.x - 80) % 40 == 0 and (self.rect.y - 80) % 40 == 0 and self.alive:
-            self.speed_x = 0
-            self.speed_y = 0
             start = 40
             if board[(self.rect.y - start) // 40 - 1][(self.rect.x - start) // 40][1] == 'h':
                 if board[(self.rect.y - start) // 40 - 1][(self.rect.x - start) // 40][0] == 'A':
@@ -387,20 +342,12 @@ class Hero(pygame.sprite.Sprite):
                         hero1.money = 0
                         board[(hero1.rect.y - start) // 40][(hero1.rect.x - start) // 40] = 'Ng'
                         hero1.alive = False
-                        hero1.speed_x = 0
-                        hero1.speed_y = 0
-                        hero1.rect.x = -1000
-                        hero1.rect.y = -1000
-                        return -5
+                        return 10
                     elif self.money < hero1.money:
                         hero1.money += self.money // 4
                         self.money = 0
-                        board[(self.rect.y - start) // 40][(self.rect.x - start) // 40] = 'Ng'
                         self.alive = False
-                        self.speed_x = 0
-                        self.speed_y = 0
-                        self.rect.x = -1000
-                        self.rect.y = -1000
+                        board[(self.rect.y - start) // 40][(self.rect.x - start) // 40] = 'Ng'
                         return -20
                     else:
                         hero1.money -= hero1.money // 4
@@ -413,20 +360,12 @@ class Hero(pygame.sprite.Sprite):
                         hero2.money = 0
                         board[(hero2.rect.y - start) // 40][(hero2.rect.x - start) // 40] = 'Ng'
                         hero2.alive = False
-                        hero2.speed_x = 0
-                        hero2.speed_y = 0
-                        hero2.rect.x = -1000
-                        hero2.rect.y = -1000
-                        return -5
+                        return 10
                     elif self.money < hero2.money:
                         hero2.money += self.money // 4
                         self.money = 0
-                        board[(self.rect.y - start) // 40][(self.rect.x - start) // 40] = 'Ng'
                         self.alive = False
-                        self.speed_x = 0
-                        self.speed_y = 0
-                        self.rect.x = -1000
-                        self.rect.y = -1000
+                        board[(self.rect.y - start) // 40][(self.rect.x - start) // 40] = 'Ng'
                         return -20
                     else:
                         hero2.money -= hero2.money // 4
@@ -439,20 +378,12 @@ class Hero(pygame.sprite.Sprite):
                         hero3.money = 0
                         board[(hero3.rect.y - start) // 40][(hero3.rect.x - start) // 40] = 'Ng'
                         hero3.alive = False
-                        hero3.speed_x = 0
-                        hero3.speed_y = 0
-                        hero3.rect.x = -1000
-                        hero3.rect.y = -1000
-                        return -5
+                        return 10
                     elif self.money < hero3.money:
                         hero3.money += self.money // 4
                         self.money = 0
-                        board[(self.rect.y - start) // 40][(self.rect.x - start) // 40] = 'Ng'
                         self.alive = False
-                        self.speed_x = 0
-                        self.speed_y = 0
-                        self.rect.x = -1000
-                        self.rect.y = -1000
+                        board[(self.rect.y - start) // 40][(self.rect.x - start) // 40] = 'Ng'
                         return -20
                     else:
                         hero3.money -= hero3.money // 4
@@ -465,20 +396,12 @@ class Hero(pygame.sprite.Sprite):
                         hero4.money = 0
                         board[(hero4.rect.y - start) // 40][(hero4.rect.x - start) // 40] = 'Ng'
                         hero4.alive = False
-                        hero4.speed_x = 0
-                        hero4.speed_y = 0
-                        hero4.rect.x = -1000
-                        hero4.rect.y = -1000
-                        return -5
+                        return 10
                     elif self.money < hero4.money:
                         hero4.money += self.money // 4
                         self.money = 0
-                        board[(self.rect.y - start) // 40][(self.rect.x - start) // 40] = 'Ng'
                         self.alive = False
-                        self.speed_x = 0
-                        self.speed_y = 0
-                        self.rect.x = -1000
-                        self.rect.y = -1000
+                        board[(self.rect.y - start) // 40][(self.rect.x - start) // 40] = 'Ng'
                         return -20
                     else:
                         hero4.money -= hero4.money // 4
@@ -492,20 +415,12 @@ class Hero(pygame.sprite.Sprite):
                         hero1.money = 0
                         board[(hero1.rect.y - start) // 40][(hero1.rect.x - start) // 40] = 'Ng'
                         hero1.alive = False
-                        hero1.speed_x = 0
-                        hero1.speed_y = 0
-                        hero1.rect.x = -1000
-                        hero1.rect.y = -1000
-                        return -5
+                        return 10
                     elif self.money < hero1.money:
                         hero1.money += self.money // 4
                         self.money = 0
-                        board[(self.rect.y - start) // 40][(self.rect.x - start) // 40] = 'Ng'
                         self.alive = False
-                        self.speed_x = 0
-                        self.speed_y = 0
-                        self.rect.x = -1000
-                        self.rect.y = -1000
+                        board[(self.rect.y - start) // 40][(self.rect.x - start) // 40] = 'Ng'
                         return -20
                     else:
                         hero1.money -= hero1.money // 4
@@ -518,20 +433,12 @@ class Hero(pygame.sprite.Sprite):
                         hero2.money = 0
                         board[(hero2.rect.y - start) // 40][(hero2.rect.x - start) // 40] = 'Ng'
                         hero2.alive = False
-                        hero2.speed_x = 0
-                        hero2.speed_y = 0
-                        hero2.rect.x = -1000
-                        hero2.rect.y = -1000
-                        return -5
+                        return 10
                     elif self.money < hero2.money:
                         hero2.money += self.money // 4
                         self.money = 0
-                        board[(self.rect.y - start) // 40][(self.rect.x - start) // 40] = 'Ng'
                         self.alive = False
-                        self.speed_x = 0
-                        self.speed_y = 0
-                        self.rect.x = -1000
-                        self.rect.y = -1000
+                        board[(self.rect.y - start) // 40][(self.rect.x - start) // 40] = 'Ng'
                         return -20
                     else:
                         hero2.money -= hero2.money // 4
@@ -544,20 +451,12 @@ class Hero(pygame.sprite.Sprite):
                         hero3.money = 0
                         board[(hero3.rect.y - start) // 40][(hero3.rect.x - start) // 40] = 'Ng'
                         hero3.alive = False
-                        hero3.speed_x = 0
-                        hero3.speed_y = 0
-                        hero3.rect.x = -1000
-                        hero3.rect.y = -1000
-                        return -5
+                        return 10
                     elif self.money < hero3.money:
                         hero3.money += self.money // 4
                         self.money = 0
-                        board[(self.rect.y - start) // 40][(self.rect.x - start) // 40] = 'Ng'
                         self.alive = False
-                        self.speed_x = 0
-                        self.speed_y = 0
-                        self.rect.x = -1000
-                        self.rect.y = -1000
+                        board[(self.rect.y - start) // 40][(self.rect.x - start) // 40] = 'Ng'
                         return -20
                     else:
                         hero3.money -= hero3.money // 4
@@ -570,20 +469,12 @@ class Hero(pygame.sprite.Sprite):
                         hero4.money = 0
                         board[(hero4.rect.y - start) // 40][(hero4.rect.x - start) // 40] = 'Ng'
                         hero4.alive = False
-                        hero4.speed_x = 0
-                        hero4.speed_y = 0
-                        hero4.rect.x = -1000
-                        hero4.rect.y = -1000
-                        return -5
+                        return 10
                     elif self.money < hero4.money:
                         hero4.money += self.money // 4
                         self.money = 0
-                        board[(self.rect.y - start) // 40][(self.rect.x - start) // 40] = 'Ng'
                         self.alive = False
-                        self.speed_x = 0
-                        self.speed_y = 0
-                        self.rect.x = -1000
-                        self.rect.y = -1000
+                        board[(self.rect.y - start) // 40][(self.rect.x - start) // 40] = 'Ng'
                         return -20
                     else:
                         hero4.money -= hero4.money // 4
@@ -597,20 +488,12 @@ class Hero(pygame.sprite.Sprite):
                         hero1.money = 0
                         board[(hero1.rect.y - start) // 40][(hero1.rect.x - start) // 40] = 'Ng'
                         hero1.alive = False
-                        hero1.speed_x = 0
-                        hero1.speed_y = 0
-                        hero1.rect.x = -1000
-                        hero1.rect.y = -1000
-                        return -5
+                        return 10
                     elif self.money < hero1.money:
                         hero1.money += self.money // 4
                         self.money = 0
-                        board[(self.rect.y - start) // 40][(self.rect.x - start) // 40] = 'Ng'
                         self.alive = False
-                        self.speed_x = 0
-                        self.speed_y = 0
-                        self.rect.x = -1000
-                        self.rect.y = -1000
+                        board[(self.rect.y - start) // 40][(self.rect.x - start) // 40] = 'Ng'
                         return -20
                     else:
                         hero1.money -= hero1.money // 4
@@ -623,20 +506,12 @@ class Hero(pygame.sprite.Sprite):
                         hero2.money = 0
                         board[(hero2.rect.y - start) // 40][(hero2.rect.x - start) // 40] = 'Ng'
                         hero2.alive = False
-                        hero2.speed_x = 0
-                        hero2.speed_y = 0
-                        hero2.rect.x = -1000
-                        hero2.rect.y = -1000
-                        return -5
+                        return 10
                     elif self.money < hero2.money:
                         hero2.money += self.money // 4
                         self.money = 0
-                        board[(self.rect.y - start) // 40][(self.rect.x - start) // 40] = 'Ng'
                         self.alive = False
-                        self.speed_x = 0
-                        self.speed_y = 0
-                        self.rect.x = -1000
-                        self.rect.y = -1000
+                        board[(self.rect.y - start) // 40][(self.rect.x - start) // 40] = 'Ng'
                         return -20
                     else:
                         hero2.money -= hero2.money // 4
@@ -649,20 +524,12 @@ class Hero(pygame.sprite.Sprite):
                         hero3.money = 0
                         board[(hero3.rect.y - start) // 40][(hero3.rect.x - start) // 40] = 'Ng'
                         hero3.alive = False
-                        hero3.speed_x = 0
-                        hero3.speed_y = 0
-                        hero3.rect.x = -1000
-                        hero3.rect.y = -1000
-                        return -5
+                        return 10
                     elif self.money < hero3.money:
                         hero3.money += self.money // 4
                         self.money = 0
-                        board[(self.rect.y - start) // 40][(self.rect.x - start) // 40] = 'Ng'
                         self.alive = False
-                        self.speed_x = 0
-                        self.speed_y = 0
-                        self.rect.x = -1000
-                        self.rect.y = -1000
+                        board[(self.rect.y - start) // 40][(self.rect.x - start) // 40] = 'Ng'
                         return -20
                     else:
                         hero3.money -= hero3.money // 4
@@ -675,20 +542,12 @@ class Hero(pygame.sprite.Sprite):
                         hero4.money = 0
                         board[(hero4.rect.y - start) // 40][(hero4.rect.x - start) // 40] = 'Ng'
                         hero4.alive = False
-                        hero4.speed_x = 0
-                        hero4.speed_y = 0
-                        hero4.rect.x = -1000
-                        hero4.rect.y = -1000
-                        return -5
+                        return 10
                     elif self.money < hero4.money:
                         hero4.money += self.money // 4
                         self.money = 0
-                        board[(self.rect.y - start) // 40][(self.rect.x - start) // 40] = 'Ng'
                         self.alive = False
-                        self.speed_x = 0
-                        self.speed_y = 0
-                        self.rect.x = -1000
-                        self.rect.y = -1000
+                        board[(self.rect.y - start) // 40][(self.rect.x - start) // 40] = 'Ng'
                         return -20
                     else:
                         hero4.money -= hero4.money // 4
@@ -702,20 +561,12 @@ class Hero(pygame.sprite.Sprite):
                         hero1.money = 0
                         board[(hero1.rect.y - start) // 40][(hero1.rect.x - start) // 40] = 'Ng'
                         hero1.alive = False
-                        hero1.speed_x = 0
-                        hero1.speed_y = 0
-                        hero1.rect.x = -1000
-                        hero1.rect.y = -1000
-                        return -5
+                        return 10
                     elif self.money < hero1.money:
                         hero1.money += self.money // 4
                         self.money = 0
-                        board[(self.rect.y - start) // 40][(self.rect.x - start) // 40] = 'Ng'
                         self.alive = False
-                        self.speed_x = 0
-                        self.speed_y = 0
-                        self.rect.x = -1000
-                        self.rect.y = -1000
+                        board[(self.rect.y - start) // 40][(self.rect.x - start) // 40] = 'Ng'
                         return -20
                     else:
                         hero1.money -= hero1.money // 4
@@ -728,20 +579,12 @@ class Hero(pygame.sprite.Sprite):
                         hero2.money = 0
                         board[(hero2.rect.y - start) // 40][(hero2.rect.x - start) // 40] = 'Ng'
                         hero2.alive = False
-                        hero2.speed_x = 0
-                        hero2.speed_y = 0
-                        hero2.rect.x = -1000
-                        hero2.rect.y = -1000
-                        return -5
+                        return 10
                     elif self.money < hero2.money:
                         hero2.money += self.money // 4
                         self.money = 0
-                        board[(self.rect.y - start) // 40][(self.rect.x - start) // 40] = 'Ng'
                         self.alive = False
-                        self.speed_x = 0
-                        self.speed_y = 0
-                        self.rect.x = -1000
-                        self.rect.y = -1000
+                        board[(self.rect.y - start) // 40][(self.rect.x - start) // 40] = 'Ng'
                         return -20
                     else:
                         hero2.money -= hero2.money // 4
@@ -754,20 +597,12 @@ class Hero(pygame.sprite.Sprite):
                         hero3.money = 0
                         board[(hero3.rect.y - start) // 40][(hero3.rect.x - start) // 40] = 'Ng'
                         hero3.alive = False
-                        hero3.speed_x = 0
-                        hero3.speed_y = 0
-                        hero3.rect.x = -1000
-                        hero3.rect.y = -1000
-                        return -5
+                        return 10
                     elif self.money < hero3.money:
                         hero3.money += self.money // 4
                         self.money = 0
-                        board[(self.rect.y - start) // 40][(self.rect.x - start) // 40] = 'Ng'
                         self.alive = False
-                        self.speed_x = 0
-                        self.speed_y = 0
-                        self.rect.x = -1000
-                        self.rect.y = -1000
+                        board[(self.rect.y - start) // 40][(self.rect.x - start) // 40] = 'Ng'
                         return -20
                     else:
                         hero3.money -= hero3.money // 4
@@ -780,20 +615,12 @@ class Hero(pygame.sprite.Sprite):
                         hero4.money = 0
                         board[(hero4.rect.y - start) // 40][(hero4.rect.x - start) // 40] = 'Ng'
                         hero4.alive = False
-                        hero4.speed_x = 0
-                        hero4.speed_y = 0
-                        hero4.rect.x = -1000
-                        hero4.rect.y = -1000
-                        return -5
+                        return 10
                     elif self.money < hero4.money:
                         hero4.money += self.money // 4
                         self.money = 0
-                        board[(self.rect.y - start) // 40][(self.rect.x - start) // 40] = 'Ng'
                         self.alive = False
-                        self.speed_x = 0
-                        self.speed_y = 0
-                        self.rect.x = -1000
-                        self.rect.y = -1000
+                        board[(self.rect.y - start) // 40][(self.rect.x - start) // 40] = 'Ng'
                         return -20
                     else:
                         hero4.money -= hero4.money // 4
@@ -991,7 +818,7 @@ hero4_img = pygame.image.load(os.path.join(img_folder, 'hero4.png')).convert()
 
 pygame.mixer.init()
 music_folder = os.path.join(game_folder, 'music')
-#pygame.mixer.music.load(os.path.join(music_folder, 'hero.mp3'))
+# pygame.mixer.music.load(os.path.join(music_folder, 'hero.mp3'))
 
 clock = pygame.time.Clock()
 
@@ -1007,10 +834,10 @@ init_forest(board, 16, 32, 100)
 init_mine(board, 16, 32, 100)
 init_score()
 agents = []
-hero1 = Hero(100, 3, 3, hero1_img)
-hero2 = Hero(100, 28, 3, hero2_img)
-hero3 = Hero(100, 28, 12, hero3_img)
-hero4 = Hero(100, 3, 12, hero4_img)
+hero1 = Hero(100, 0, 0, hero1_img)
+hero2 = Hero(100, 31, 0, hero2_img)
+hero3 = Hero(100, 31, 15, hero3_img)
+hero4 = Hero(100, 0, 15, hero4_img)
 
 all_sprites.add(hero1)
 all_sprites.add(hero2)
@@ -1025,15 +852,14 @@ all_sprites.add(Mini_hero(100, 35, 4, hero4_img))
 env = CustomEnv()
 
 # pygame.mixer.music.play(loops=-1)
-agent1 = QLearningAgent(alpha=0.5, epsilon=0.51, discount=0.89,
+agent1 = QLearningAgent(alpha=0.5, epsilon=0.59, discount=0.99,
                         get_legal_actions=lambda s: range(env.n_action), hero=hero1)
-agent2 = QLearningAgent(alpha=0.5, epsilon=0.51, discount=0.89,
+agent2 = QLearningAgent(alpha=0.5, epsilon=0.59, discount=0.99,
                         get_legal_actions=lambda s: range(env.n_action), hero=hero2)
-agent3 = QLearningAgent(alpha=0.5, epsilon=0.51, discount=0.89,
+agent3 = QLearningAgent(alpha=0.5, epsilon=0.49, discount=0.99,
                         get_legal_actions=lambda s: range(env.n_action), hero=hero3)
-agent4 = QLearningAgent(alpha=0.5, epsilon=0.51, discount=0.89,
+agent4 = QLearningAgent(alpha=0.5, epsilon=0.59, discount=0.99,
                         get_legal_actions=lambda s: range(env.n_action), hero=hero4)
-
 
 running = True
 States()
@@ -1076,44 +902,40 @@ def run(running, t, iterp):
     pygame.display.flip()
 
 
-def play_and_train(env, agents, iterp, t_max=10 ** 2*5):
+def play_and_train(env, agents, iterp, t_max=10 ** 4):
     total_reward = 0.0
     global board
     board = env.reset()
 
     for t in range(t_max):
-        prevagent = agents[-1]
-        if t % 20 == 0:
-            print(agent1.qvalues)
+        if t % 50 == 0:
+            np.savetxt('test_1.txt', agent3.qtable)
+        prevagent = agent4
         for agent_n in agents:
             if not agent_n.hero.alive:
-                s = agent_n.hero.state
-                run(done, t, iterp)
-                continue
-            for i in range(18):
-                for j in range(34):
-                    if board[i][j] == 'Ah' and not hero1.alive:
-                        board[i][j] = 'Ng'
-                    if board[i][j] == 'Bh' and not hero2.alive:
-                        board[i][j] = 'Ng'
-                    if board[i][j] == 'Ch' and not hero3.alive:
-                        board[i][j] = 'Ng'
-                    if board[i][j] == 'Dh' and not hero4.alive:
-                        board[i][j] = 'Ng'
+                agents.remove(agent_n)
 
             s = agent_n.hero.state
             a = agent_n.get_action(s)
             b = np.array(board)
-
+            for i in board:
+                if 'Ah' in i and agent_n == agent1:
+                    print(t, "Ah")
+                if 'Bh' in i and agent_n == agent2:
+                    print(t, "Bh")
+                if 'Ch' in i and agent_n == agent3:
+                    print(t, "Ch")
+                if 'Dh' in i and agent_n == agent4:
+                    print(t, "Dh")
             if prevagent == agent_n:
                 continue
             prevagent = agent_n
-
             next_s, r, done, _ = env.step(a, agent_n.hero)
 
+
             run(done, t, iterp)
-            if next_s != 259:
-                print(next_s)
+            run(done, t, iterp)
+
             agent_n.update(s, a, r, next_s)
 
             total_reward += r
@@ -1123,68 +945,15 @@ def play_and_train(env, agents, iterp, t_max=10 ** 2*5):
     return total_reward
 
 
-def play_not_train(env, agents, iterp, t_max=10 ** 3):
-    total_reward = 0.0
-    global board
-    board = env.reset()
-    for t in range(t_max):
-        prevagent = agents[-1]
-        for agent_n in agents:
-            if not agent_n.hero.alive:
-                s = agent_n.hero.state
-                run(done, t, iterp)
-                continue
-            for i in range(18):
-                for j in range(34):
-                    if board[i][j] == 'Ah' and not hero1.alive:
-                        board[i][j] = 'Ng'
-                    if board[i][j] == 'Bh' and not hero2.alive:
-                        board[i][j] = 'Ng'
-                    if board[i][j] == 'Ch' and not hero3.alive:
-                        board[i][j] = 'Ng'
-                    if board[i][j] == 'Dh' and not hero4.alive:
-                        board[i][j] = 'Ng'
-
-            s = agent_n.hero.state
-            a = agent_n.get_action(s)
-            if prevagent == agent_n:
-                continue
-            prevagent = agent_n
-            next_s, r, done, _ = env.step(a, agent_n.hero)
-
-            run(done, t, iterp)
-
-            total_reward += r
-            if not done:
-                break
-
-    return total_reward
-
-
 rewards = []
-train = True
-if not train:
-    agent1.qtable = np.loadtxt(f'weight/g80agent0.txt')
-    agent2.qtable = np.loadtxt(f'weight/g80agent1.txt')
-    agent3.qtable = np.loadtxt(f'weight/g80agent2.txt')
-    agent4.qtable = np.loadtxt(f'weight/g80agent3.txt')
-for i in range(1000):
-    if train:
-        try:
-            rewards.append(play_and_train(env, agents, i))
-        except:
-            rewards.append(play_and_train(env, agents, i))
-        for agent in agents:
-            agent.epsilon *= 0.99
+for i in range(500):
+    rewards.append(play_and_train(env, agents, i))
+    for agent in agents:
+        agent.epsilon *= 0.99
 
-    else:
-        try:
-            rewards.append(play_not_train(env, agents, i))
-        except:
-            rewards.append(play_not_train(env, agents, i))
     print(rewards[i])
-# до сюда
 
+# до сюда
 
 
 sys.stdin.close()
